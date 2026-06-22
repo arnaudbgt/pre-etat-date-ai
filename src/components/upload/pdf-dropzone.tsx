@@ -4,12 +4,15 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { FileUp } from "lucide-react";
 
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { extractTextFromPdf } from "@/lib/pdf/extract-text";
 import { PDF_MIME_TYPE, SOURCE_DOCUMENTS_BUCKET } from "@/lib/upload/constants";
 import { hasPdfSignature, validateFileMetadata } from "@/lib/upload/validation";
 
 import { UploadList, type UploadEntry } from "./upload-list";
 
 type PdfDropzoneProps = {
+  classificationMaxCharacters: number;
+  classificationMaxPages: number;
   maxFiles: number;
   maxPdfSizeBytes: number;
   maxPdfSizeMb: number;
@@ -24,7 +27,16 @@ type SignedUpload = {
   token?: string;
 };
 
+type ClassificationResponse = {
+  confidence?: number;
+  documentType?: UploadEntry["documentType"];
+  error?: string;
+  status?: "classified" | "uncertain" | "insufficient_text";
+};
+
 export function PdfDropzone({
+  classificationMaxCharacters,
+  classificationMaxPages,
   maxFiles,
   maxPdfSizeBytes,
   maxPdfSizeMb,
@@ -110,7 +122,52 @@ export function PdfDropzone({
         );
       }
 
-      updateEntry(documentId, { error: undefined, status: "uploaded" });
+      updateEntry(documentId, { error: undefined, status: "classifying" });
+
+      let extractedText: Awaited<ReturnType<typeof extractTextFromPdf>>;
+
+      try {
+        extractedText = await extractTextFromPdf(file, {
+          maxCharacters: classificationMaxCharacters,
+          maxPages: classificationMaxPages,
+        });
+      } catch {
+        extractedText = { pages: [], totalPages: 0, truncated: false };
+      }
+
+      const classificationResponse = await fetch(
+        `/api/projects/${projectId}/documents/classify`,
+        {
+          body: JSON.stringify({
+            documentId,
+            pages: extractedText.pages,
+            totalPages: extractedText.totalPages,
+            truncated: extractedText.truncated,
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+      const classification =
+        (await classificationResponse.json()) as ClassificationResponse;
+
+      if (!classificationResponse.ok || !classification.status) {
+        throw new Error(
+          classification.error ?? "Impossible de classifier le document.",
+        );
+      }
+
+      updateEntry(documentId, {
+        confidence: classification.confidence,
+        documentType: classification.documentType,
+        error: undefined,
+        status:
+          classification.status === "classified"
+            ? "classified"
+            : classification.status === "uncertain"
+              ? "classification_uncertain"
+              : "insufficient_text",
+      });
     } catch (uploadError) {
       updateEntry(documentId, {
         error:

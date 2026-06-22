@@ -1,4 +1,4 @@
-// Generated from supabase/migrations/20260622150000_initial_schema.sql.
+// Generated from the SQL migrations in supabase/migrations.
 // Regenerate against the local database with `npm run db:types`.
 
 export type Json =
@@ -16,6 +16,10 @@ export type Database = {
         Row: {
           auto_delete_after: string | null;
           classification_confidence: number | null;
+          classification_details: Json | null;
+          classification_status: Database["public"]["Enums"]["classification_status"];
+          classification_version: string | null;
+          classified_at: string | null;
           created_at: string;
           deleted_at: string | null;
           deleted_reason: string | null;
@@ -34,6 +38,10 @@ export type Database = {
         Insert: {
           auto_delete_after?: string | null;
           classification_confidence?: number | null;
+          classification_details?: Json | null;
+          classification_status?: Database["public"]["Enums"]["classification_status"];
+          classification_version?: string | null;
+          classified_at?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_reason?: string | null;
@@ -52,6 +60,10 @@ export type Database = {
         Update: {
           auto_delete_after?: string | null;
           classification_confidence?: number | null;
+          classification_details?: Json | null;
+          classification_status?: Database["public"]["Enums"]["classification_status"];
+          classification_version?: string | null;
+          classified_at?: string | null;
           created_at?: string;
           deleted_at?: string | null;
           deleted_reason?: string | null;
@@ -339,6 +351,13 @@ export type Database = {
       };
     };
     Enums: {
+      classification_status:
+        | "pending"
+        | "processing"
+        | "classified"
+        | "uncertain"
+        | "insufficient_text"
+        | "failed";
       document_processing_status: "pending" | "processing" | "processed" | "failed" | "deleted";
       document_type:
         | "unknown"
@@ -347,6 +366,10 @@ export type Database = {
         | "pv_ag"
         | "annexe_comptable"
         | "reglement_copropriete"
+        | "fiche_synthetique"
+        | "dtg"
+        | "ppt"
+        | "dpe_collectif"
         | "other";
       field_status: "confirmed" | "uncertain" | "missing" | "inconsistent";
       payment_status: "pending" | "paid" | "failed" | "refunded" | "expired";

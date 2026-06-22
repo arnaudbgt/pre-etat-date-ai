@@ -1,21 +1,54 @@
-import { CheckCircle2, CircleAlert, Clock3, LoaderCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  CircleAlert,
+  CircleHelp,
+  Clock3,
+  LoaderCircle,
+} from "lucide-react";
+
+import type { ClassifiedDocumentType } from "@/lib/classification/types";
 
 export type UploadEntry = {
+  confidence?: number;
+  documentType?: ClassifiedDocumentType;
   error?: string;
   id: string;
   name: string;
-  status: "pending" | "uploading" | "uploaded" | "failed";
+  status:
+    | "pending"
+    | "uploading"
+    | "classifying"
+    | "classified"
+    | "classification_uncertain"
+    | "insufficient_text"
+    | "failed";
 };
 
 const statusLabels: Record<UploadEntry["status"], string> = {
+  classified: "Document reconnu",
+  classification_uncertain: "Type à vérifier",
+  classifying: "Reconnaissance…",
   failed: "Échec",
+  insufficient_text: "Texte insuffisant",
   pending: "En attente",
-  uploaded: "Envoyé",
   uploading: "Envoi…",
 };
 
+const documentTypeLabels: Record<ClassifiedDocumentType, string> = {
+  annexe_comptable: "Annexe comptable",
+  appel_de_fonds: "Appel de fonds",
+  dpe_collectif: "DPE collectif",
+  dtg: "Diagnostic technique global",
+  fiche_synthetique: "Fiche synthétique",
+  other: "Autre document",
+  ppt: "Plan pluriannuel de travaux",
+  pv_ag: "Procès-verbal d’AG",
+  reglement_copropriete: "Règlement de copropriété",
+  releve_coproprietaire: "Relevé copropriétaire",
+};
+
 function StatusIcon({ status }: { status: UploadEntry["status"] }) {
-  if (status === "uploaded") {
+  if (status === "classified") {
     return <CheckCircle2 aria-hidden className="size-5 text-green-700" />;
   }
 
@@ -23,7 +56,11 @@ function StatusIcon({ status }: { status: UploadEntry["status"] }) {
     return <CircleAlert aria-hidden className="size-5 text-red-700" />;
   }
 
-  if (status === "uploading") {
+  if (status === "classification_uncertain") {
+    return <CircleHelp aria-hidden className="size-5 text-amber-700" />;
+  }
+
+  if (status === "uploading" || status === "classifying") {
     return (
       <LoaderCircle
         aria-hidden
@@ -54,7 +91,14 @@ export function UploadList({ entries }: { entries: UploadEntry[] }) {
                   : "text-sm text-neutral-500"
               }
             >
-              {entry.error ?? statusLabels[entry.status]}
+              {entry.error ??
+                (entry.documentType
+                  ? `${documentTypeLabels[entry.documentType]}${
+                      typeof entry.confidence === "number"
+                        ? ` — ${entry.confidence} %`
+                        : ""
+                    }`
+                  : statusLabels[entry.status])}
             </p>
           </div>
         </li>

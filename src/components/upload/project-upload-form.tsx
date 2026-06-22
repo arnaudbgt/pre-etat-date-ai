@@ -5,12 +5,16 @@ import { useState, type FormEvent } from "react";
 import { PdfDropzone } from "./pdf-dropzone";
 
 type ProjectUploadFormProps = {
+  classificationMaxCharacters: number;
+  classificationMaxPages: number;
   maxFiles: number;
   maxPdfSizeBytes: number;
   maxPdfSizeMb: number;
 };
 
 export function ProjectUploadForm({
+  classificationMaxCharacters,
+  classificationMaxPages,
   maxFiles,
   maxPdfSizeBytes,
   maxPdfSizeMb,
@@ -59,6 +63,8 @@ export function ProjectUploadForm({
   if (projectId) {
     return (
       <PdfDropzone
+        classificationMaxCharacters={classificationMaxCharacters}
+        classificationMaxPages={classificationMaxPages}
         maxFiles={maxFiles}
         maxPdfSizeBytes={maxPdfSizeBytes}
         maxPdfSizeMb={maxPdfSizeMb}
