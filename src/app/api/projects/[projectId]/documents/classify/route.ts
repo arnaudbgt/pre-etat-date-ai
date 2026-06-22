@@ -8,7 +8,8 @@ import {
   type TextPage,
 } from "@/lib/classification/types";
 import { extractSimpleFields } from "@/lib/extraction/simple/extractor";
-import { persistSimpleExtraction } from "@/lib/extraction/simple/persistence";
+import { extractFinancialFields } from "@/lib/extraction/simple/financial-extractor";
+import { persistDeterministicExtraction } from "@/lib/extraction/simple/persistence";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getUploadSessionProjectId } from "@/lib/upload/session";
 import { isUuid } from "@/lib/upload/validation";
@@ -282,12 +283,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let extractedFieldCount = 0;
 
   try {
-    const candidates = extractSimpleFields({
+    const extractionContext = {
       classificationStatus: result.status,
       documentType: result.documentType,
       pages,
-    });
-    await persistSimpleExtraction({
+    };
+    const candidates = [
+      ...extractSimpleFields(extractionContext),
+      ...extractFinancialFields(extractionContext),
+    ];
+    await persistDeterministicExtraction({
       candidates,
       classificationStatus: result.status,
       documentId,

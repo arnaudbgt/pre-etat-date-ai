@@ -10,6 +10,7 @@ export function mergeSimpleFieldSources(
   if (sources.length === 0) {
     return {
       confidence: 0,
+      extractionVersion: null,
       normalizedValue: null,
       sourceDocumentId: null,
       status: "missing",
@@ -30,6 +31,7 @@ export function mergeSimpleFieldSources(
   if (distinctValues.size > 1) {
     return {
       confidence: winner.confidence,
+      extractionVersion: winner.extractionVersion,
       normalizedValue: winner.normalizedValue,
       sourceDocumentId: winner.documentId,
       status: "uncertain",
@@ -44,6 +46,7 @@ export function mergeSimpleFieldSources(
 
   return {
     confidence,
+    extractionVersion: winner.extractionVersion,
     normalizedValue: winner.normalizedValue,
     sourceDocumentId: winner.documentId,
     status: confidence >= 85 ? "confirmed" : "uncertain",

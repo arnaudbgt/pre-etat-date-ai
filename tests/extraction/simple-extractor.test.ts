@@ -16,6 +16,7 @@ function source(
     confidence,
     documentId,
     excerpt: value,
+    extractionVersion: "simple-rules-v1",
     matchedRule: "test.rule",
     normalizedValue: value.toLowerCase(),
     page: 1,

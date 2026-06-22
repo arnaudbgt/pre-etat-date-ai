@@ -1,5 +1,6 @@
 import type { TextPage } from "@/lib/classification/types";
 
+import { SIMPLE_EXTRACTION_VERSION } from "./catalog";
 import {
   findDates,
   normalizeComparable,
@@ -71,6 +72,7 @@ function candidate(
   return {
     confidence: adjustedConfidence(confidence, context),
     excerpt: sourceExcerpt(page.text, start, end),
+    extractionVersion: SIMPLE_EXTRACTION_VERSION,
     fieldId,
     matchedRule,
     normalizedValue: normalize(cleaned),

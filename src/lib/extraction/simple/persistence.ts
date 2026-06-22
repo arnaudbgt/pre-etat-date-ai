@@ -5,10 +5,11 @@ import type { Json } from "@/types/database.types";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 import {
+  EXTRACTION_FIELD_BY_ID,
+  EXTRACTION_FIELD_DEFINITIONS,
+  FINANCIAL_EXTRACTION_VERSION,
   SIMPLE_EXTRACTION_VERSION,
-  SIMPLE_FIELD_BY_ID,
-  SIMPLE_FIELD_DEFINITIONS,
-  type SimpleFieldId,
+  type ExtractionFieldId,
 } from "./catalog";
 import { canUpdateCanonicalField, mergeSimpleFieldSources } from "./merge";
 import type { SimpleFieldCandidate, StoredSourceCandidate } from "./types";
@@ -23,29 +24,44 @@ type PersistenceInput = {
 
 function storedValue(value: Json | null) {
   if (typeof value === "string") {
-    return { normalizedValue: value, value };
+    return { extractionVersion: null, normalizedValue: value, value };
+  }
+
+  if (typeof value === "number") {
+    return {
+      extractionVersion: null,
+      normalizedValue: value.toString(),
+      value,
+    };
   }
 
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const raw = value as Record<string, Json | undefined>;
 
     if (
-      typeof raw.value === "string" &&
+      (typeof raw.value === "string" || typeof raw.value === "number") &&
       typeof raw.normalizedValue === "string"
     ) {
-      return { normalizedValue: raw.normalizedValue, value: raw.value };
+      return {
+        extractionVersion:
+          typeof raw.extractionVersion === "string"
+            ? raw.extractionVersion
+            : null,
+        normalizedValue: raw.normalizedValue,
+        value: raw.value,
+      };
     }
   }
 
   return null;
 }
 
-export async function persistSimpleExtraction(input: PersistenceInput) {
+export async function persistDeterministicExtraction(input: PersistenceInput) {
   const supabase = getSupabaseAdmin();
   const { error: ensureError } = await supabase.from("extracted_fields").upsert(
-    SIMPLE_FIELD_DEFINITIONS.map((field) => ({
+    EXTRACTION_FIELD_DEFINITIONS.map((field) => ({
       confidence: 0,
-      extraction_version: SIMPLE_EXTRACTION_VERSION,
+      extraction_version: field.extractionVersion,
       field_id: field.fieldId,
       label: field.label,
       project_id: input.projectId,
@@ -69,7 +85,7 @@ export async function persistSimpleExtraction(input: PersistenceInput) {
     .eq("project_id", input.projectId)
     .in(
       "field_id",
-      SIMPLE_FIELD_DEFINITIONS.map((field) => field.fieldId),
+      EXTRACTION_FIELD_DEFINITIONS.map((field) => field.fieldId),
     );
 
   if (fieldsError) {
@@ -77,7 +93,7 @@ export async function persistSimpleExtraction(input: PersistenceInput) {
   }
 
   const fieldsById = new Map(
-    fields.map((field) => [field.field_id as SimpleFieldId, field]),
+    fields.map((field) => [field.field_id as ExtractionFieldId, field]),
   );
 
   for (const item of input.candidates) {
@@ -99,9 +115,11 @@ export async function persistSimpleExtraction(input: PersistenceInput) {
           source_locator: {
             classificationStatus: input.classificationStatus,
             documentType: input.documentType,
+            extractionVersion: item.extractionVersion,
           },
           source_page: item.page,
           source_value: {
+            extractionVersion: item.extractionVersion,
             normalizedValue: item.normalizedValue,
             value: item.value,
           },
@@ -139,6 +157,13 @@ export async function persistSimpleExtraction(input: PersistenceInput) {
       confidence: row.confidence,
       documentId: row.document_id,
       excerpt: row.source_excerpt,
+      extractionVersion:
+        parsed.extractionVersion ??
+        (row.matched_rule?.startsWith("financial.")
+          ? FINANCIAL_EXTRACTION_VERSION
+          : row.matched_rule
+            ? SIMPLE_EXTRACTION_VERSION
+            : "unversioned"),
       matchedRule: row.matched_rule,
       normalizedValue: parsed.normalizedValue,
       page: row.source_page,
@@ -154,13 +179,15 @@ export async function persistSimpleExtraction(input: PersistenceInput) {
       continue;
     }
 
-    const definition = SIMPLE_FIELD_BY_ID[field.field_id as SimpleFieldId];
+    const definition =
+      EXTRACTION_FIELD_BY_ID[field.field_id as ExtractionFieldId];
     const merged = mergeSimpleFieldSources(sourcesByField.get(field.id) ?? []);
     const { error: updateError } = await supabase
       .from("extracted_fields")
       .update({
         confidence: merged.confidence,
-        extraction_version: SIMPLE_EXTRACTION_VERSION,
+        extraction_version:
+          merged.extractionVersion ?? definition.extractionVersion,
         label: definition.label,
         normalized_value: merged.normalizedValue,
         section: definition.section,
