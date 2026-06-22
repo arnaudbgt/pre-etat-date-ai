@@ -7,6 +7,8 @@ import {
   type ClassificationResult,
   type TextPage,
 } from "@/lib/classification/types";
+import { extractSimpleFields } from "@/lib/extraction/simple/extractor";
+import { persistSimpleExtraction } from "@/lib/extraction/simple/persistence";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getUploadSessionProjectId } from "@/lib/upload/session";
 import { isUuid } from "@/lib/upload/validation";
@@ -277,9 +279,43 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  let extractedFieldCount = 0;
+
+  try {
+    const candidates = extractSimpleFields({
+      classificationStatus: result.status,
+      documentType: result.documentType,
+      pages,
+    });
+    await persistSimpleExtraction({
+      candidates,
+      classificationStatus: result.status,
+      documentId,
+      documentType: result.documentType,
+      projectId,
+    });
+    extractedFieldCount = candidates.length;
+  } catch {
+    console.error("simple_extraction_failed", { documentId });
+    await supabase
+      .from("documents")
+      .update({
+        error_message: "simple_extraction_failed",
+        processing_status: "failed",
+      })
+      .eq("id", documentId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    return NextResponse.json(
+      { error: "L’extraction des champs simples a échoué." },
+      { status: 500 },
+    );
+  }
+
   return NextResponse.json({
     confidence: result.confidence,
     documentType: result.documentType,
+    extractedFieldCount,
     status: result.status,
   });
 }

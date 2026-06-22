@@ -95,6 +95,7 @@ export type Database = {
           created_at: string;
           document_id: string;
           extracted_field_id: string;
+          matched_rule: string | null;
           source_excerpt: string | null;
           source_locator: Json | null;
           source_page: number | null;
@@ -105,6 +106,7 @@ export type Database = {
           created_at?: string;
           document_id: string;
           extracted_field_id: string;
+          matched_rule?: string | null;
           source_excerpt?: string | null;
           source_locator?: Json | null;
           source_page?: number | null;
@@ -115,6 +117,7 @@ export type Database = {
           created_at?: string;
           document_id?: string;
           extracted_field_id?: string;
+          matched_rule?: string | null;
           source_excerpt?: string | null;
           source_locator?: Json | null;
           source_page?: number | null;
@@ -141,6 +144,7 @@ export type Database = {
         Row: {
           confidence: number | null;
           created_at: string;
+          extraction_version: string;
           field_id: string;
           id: string;
           label: string;
@@ -156,6 +160,7 @@ export type Database = {
         Insert: {
           confidence?: number | null;
           created_at?: string;
+          extraction_version?: string;
           field_id: string;
           id?: string;
           label: string;
@@ -171,6 +176,7 @@ export type Database = {
         Update: {
           confidence?: number | null;
           created_at?: string;
+          extraction_version?: string;
           field_id?: string;
           id?: string;
           label?: string;

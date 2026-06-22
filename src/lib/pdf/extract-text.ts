@@ -43,9 +43,12 @@ export async function extractTextFromPdf(
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       const pageText = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ")
+        .map((item) =>
+          "str" in item ? `${item.str}${item.hasEOL ? "\n" : " "}` : "",
+        )
+        .join("")
+        .replace(/[ \t]+/g, " ")
+        .replace(/ *\n */g, "\n")
         .trim();
       const remainingCharacters = limits.maxCharacters - characterCount;
 
