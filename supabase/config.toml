@@ -25,4 +25,5 @@ api_url = "http://127.0.0.1"
 enabled = false
 
 [storage]
-enabled = false
+enabled = true
+file_size_limit = "50MiB"
