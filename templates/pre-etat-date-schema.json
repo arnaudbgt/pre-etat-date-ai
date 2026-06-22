@@ -1,0 +1,13 @@
+{
+  "project": "pre-etat-date-ai",
+  "version": "0.1.0",
+  "sections": {
+    "identification": {},
+    "sommes_dues_par_vendeur": {},
+    "sommes_dues_au_vendeur": {},
+    "sommes_incombant_acquereur": {},
+    "annexe_quote_part": {},
+    "informations_diverses": {}
+  },
+  "field_statuses": ["confirmed", "uncertain", "missing", "inconsistent"]
+}
