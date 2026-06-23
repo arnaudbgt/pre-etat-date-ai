@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyDocument } from "../../src/lib/classification/classifier";
+import { getPdfExtractionFailureMessage } from "../../src/lib/pdf/diagnostics";
 
 const classify = (text: string) =>
   classifyDocument([{ pageNumber: 1, text }], { minCharacters: 40 });
@@ -92,12 +93,49 @@ describe("document rule classifier", () => {
 
   it("uses insufficient_text for a PDF without an exploitable text layer", () => {
     const result = classifyDocument([{ pageNumber: 1, text: "   12   " }], {
+      extractedCharacters: 0,
       minCharacters: 40,
+      totalPages: 1,
     });
 
     expect(result.documentType).toBe("other");
     expect(result.status).toBe("insufficient_text");
     expect(result.confidence).toBe(0);
+    expect(result.details).toMatchObject({
+      analyzedPages: 1,
+      extractedCharacters: 0,
+      pdf_has_text_layer: false,
+      totalPages: 1,
+      usefulCharacters: 2,
+    });
+  });
+
+  it("records diagnostics for a valid text PDF payload", () => {
+    const result = classifyDocument(
+      [
+        {
+          pageNumber: 1,
+          text: "APPEL DE FONDS. Montant à régler 420 €. Exigible le 1er juillet.",
+        },
+      ],
+      {
+        extractedCharacters: 68,
+        minCharacters: 40,
+        totalPages: 1,
+      },
+    );
+
+    expect(result.status).not.toBe("insufficient_text");
+    expect(result.details.extractedCharacters).toBe(68);
+    expect(result.details.pdf_has_text_layer).toBe(true);
+    expect(result.details.totalPages).toBe(1);
+    expect(result.details.usefulCharacters).toBeGreaterThan(40);
+  });
+
+  it("exposes an explicit extraction failure message instead of a silent empty payload", () => {
+    expect(getPdfExtractionFailureMessage()).toContain(
+      "Erreur d’extraction PDF",
+    );
   });
 
   it("keeps a plausible but weak result uncertain", () => {
@@ -107,6 +145,40 @@ describe("document rule classifier", () => {
 
     expect(result.documentType).toBe("appel_de_fonds");
     expect(result.status).toBe("uncertain");
+  });
+
+  it("classifies a Laforêt/ICS call for funds as appel_de_fonds", () => {
+    const result = classifyDocument(
+      [
+        {
+          pageNumber: 1,
+          text: `LAFORET MARTIGUES
+          Appel de Fonds
+          Période du 01/07/2025 au 30/09/2025
+          APPEL DE FONDS
+          Postes à répartir Total Base Tantièmes Quote-part Locatif
+          FONDS TRAVAUX ALUR 1575.00 1511581 330 0.34
+          DEPENSES CHARGES GENERALES 9771.25 1511581 6550 42.34
+          TOTAL DU LOT 190.01 124.95
+          Montant de l'appel de fonds 196.17 €
+          RECAPITULATIF ETAT DE VOTRE COMPTE Dépenses Versements
+          Appel TTC 196.17
+          Votre virement 186.82
+          Lot 0231 copropriétaire`,
+        },
+      ],
+      { minCharacters: 40, totalPages: 1 },
+    );
+
+    expect(result.documentType).toBe("appel_de_fonds");
+    expect(result.status).toBe("classified");
+    expect(result.confidence).toBeGreaterThanOrEqual(70);
+    expect(result.details.matchedSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "call_total" }),
+        expect.objectContaining({ id: "structure_distribution_table" }),
+      ]),
+    );
   });
 
   it("does not include source text in persisted classification details", () => {

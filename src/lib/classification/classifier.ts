@@ -67,16 +67,30 @@ function scoreRule(
 
 export function classifyDocument(
   pages: TextPage[],
-  options: { minCharacters: number; truncated?: boolean },
+  options: {
+    classificationDurationMs?: number;
+    extractedCharacters?: number;
+    minCharacters: number;
+    totalPages?: number;
+    truncated?: boolean;
+  },
 ): ClassificationResult {
   const normalizedPages = pages.map((page) =>
     normalizeClassificationText(page.text),
   );
   const fullText = normalizedPages.join(" ").trim();
   const usefulCharacters = fullText.replace(/[^a-z0-9]/g, "").length;
+  const extractedCharacters =
+    options.extractedCharacters ??
+    pages.reduce((sum, page) => sum + page.text.length, 0);
   const baseDetails = {
     analyzedPages: pages.length,
+    classificationDurationMs: options.classificationDurationMs ?? 0,
+    extractedCharacters,
+    pdf_has_text_layer: extractedCharacters > 0,
+    totalPages: options.totalPages ?? pages.length,
     truncated: options.truncated ?? false,
+    usefulCharacters,
     version: CLASSIFICATION_VERSION,
   };
 

@@ -24,6 +24,7 @@ type RouteContext = {
 
 type ClassificationPayload = {
   documentId?: unknown;
+  extractedCharacters?: unknown;
   pages?: unknown;
   totalPages?: unknown;
   truncated?: unknown;
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const documentId =
     typeof payload.documentId === "string" ? payload.documentId : "";
   const totalPages = Number(payload.totalPages);
+  const extractedCharacters = Number(payload.extractedCharacters);
   const pages = validatePages(
     payload.pages,
     limits.maxPages,
@@ -151,6 +153,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     !Number.isInteger(totalPages) ||
     totalPages < pages.length ||
     totalPages < 0 ||
+    !Number.isInteger(extractedCharacters) ||
+    extractedCharacters < 0 ||
+    extractedCharacters > limits.maxCharacters ||
     typeof payload.truncated !== "boolean"
   ) {
     return NextResponse.json(
@@ -231,10 +236,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let result: ClassificationResult;
 
   try {
+    const classificationStartedAt = performance.now();
     result = classifyDocument(pages, {
+      extractedCharacters,
       minCharacters: limits.minCharacters,
+      totalPages,
       truncated: payload.truncated || totalPages > pages.length,
     });
+    result = {
+      ...result,
+      details: {
+        ...result.details,
+        classificationDurationMs: Math.max(
+          0,
+          Math.round(performance.now() - classificationStartedAt),
+        ),
+      },
+    };
   } catch {
     console.error("classification_engine_failed", { documentId });
     await supabase
@@ -323,6 +341,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     confidence: result.confidence,
     documentType: result.documentType,
     extractedFieldCount,
+    pdfHasTextLayer: result.details.pdf_has_text_layer,
     status: result.status,
   });
 }

@@ -14,6 +14,7 @@ export type UploadEntry = {
   error?: string;
   id: string;
   name: string;
+  pdfHasTextLayer?: boolean;
   status:
     | "pending"
     | "uploading"
@@ -29,7 +30,7 @@ const statusLabels: Record<UploadEntry["status"], string> = {
   classification_uncertain: "Type à vérifier",
   classifying: "Reconnaissance…",
   failed: "Échec",
-  insufficient_text: "Texte insuffisant",
+  insufficient_text: "Texte PDF non exploitable",
   pending: "En attente",
   uploading: "Envoi…",
 };
@@ -92,13 +93,17 @@ export function UploadList({ entries }: { entries: UploadEntry[] }) {
               }
             >
               {entry.error ??
-                (entry.documentType
-                  ? `${documentTypeLabels[entry.documentType]}${
-                      typeof entry.confidence === "number"
-                        ? ` — ${entry.confidence} %`
-                        : ""
-                    }`
-                  : statusLabels[entry.status])}
+                (entry.status === "insufficient_text"
+                  ? entry.pdfHasTextLayer === false
+                    ? "PDF image ou texte non exploitable"
+                    : "Texte PDF non exploitable"
+                  : entry.documentType
+                    ? `${documentTypeLabels[entry.documentType]}${
+                        typeof entry.confidence === "number"
+                          ? ` — ${entry.confidence} %`
+                          : ""
+                      }`
+                    : statusLabels[entry.status])}
             </p>
           </div>
         </li>

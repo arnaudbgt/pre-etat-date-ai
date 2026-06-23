@@ -19,8 +19,10 @@ export const CLASSIFICATION_RULES: ClassificationRule[] = [
       signal("amount_due", [
         "montant a regler",
         "montant exigible",
+        "montant de l'appel de fonds",
         "total appel coproprietaire",
       ]),
+      signal("call_total", ["appel ttc"]),
       signal("due_date", [
         "date d'exigibilite",
         "exigible le",
@@ -37,10 +39,22 @@ export const CLASSIFICATION_RULES: ClassificationRule[] = [
       signal("works_fund", ["fonds travaux", "fonds de travaux"]),
       signal("budget", ["budget previsionnel"]),
       signal("next_call", ["prochain appel"]),
+      signal("period", ["periode du"]),
     ],
     majorStructures: [
       all("structure_due_amount", ["exigible", "montant", "€"]),
       all("structure_budget_share", ["budget", "tantiemes", "quote part"]),
+      all("structure_distribution_table", [
+        "postes a repartir",
+        "tantiemes",
+        "quote-part",
+      ]),
+      all("structure_total_base_share", [
+        "total",
+        "base",
+        "tantiemes",
+        "quote-part",
+      ]),
     ],
     secondaryStructures: [
       signal("payment_instructions", [

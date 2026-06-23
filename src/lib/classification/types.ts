@@ -62,13 +62,18 @@ export type ClassificationResult = {
       score: number;
       type: ClassifiableDocumentType;
     }>;
+    classificationDurationMs: number;
+    extractedCharacters: number;
     margin: number;
     matchedSignals: Array<{
       id: string;
       kind: string;
       type: ClassifiableDocumentType;
     }>;
+    pdf_has_text_layer: boolean;
+    totalPages: number;
     truncated: boolean;
+    usefulCharacters: number;
     version: string;
   };
   documentType: ClassifiedDocumentType;

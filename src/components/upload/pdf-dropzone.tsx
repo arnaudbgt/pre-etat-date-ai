@@ -4,6 +4,10 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { FileUp } from "lucide-react";
 
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import {
+  getPdfExtractionFailureMessage,
+  getPdfTextDiagnostics,
+} from "@/lib/pdf/diagnostics";
 import { extractTextFromPdf } from "@/lib/pdf/extract-text";
 import { PDF_MIME_TYPE, SOURCE_DOCUMENTS_BUCKET } from "@/lib/upload/constants";
 import { hasPdfSignature, validateFileMetadata } from "@/lib/upload/validation";
@@ -31,6 +35,7 @@ type ClassificationResponse = {
   confidence?: number;
   documentType?: UploadEntry["documentType"];
   error?: string;
+  pdfHasTextLayer?: boolean;
   status?: "classified" | "uncertain" | "insufficient_text";
 };
 
@@ -124,22 +129,20 @@ export function PdfDropzone({
 
       updateEntry(documentId, { error: undefined, status: "classifying" });
 
-      let extractedText: Awaited<ReturnType<typeof extractTextFromPdf>>;
-
-      try {
-        extractedText = await extractTextFromPdf(file, {
-          maxCharacters: classificationMaxCharacters,
-          maxPages: classificationMaxPages,
-        });
-      } catch {
-        extractedText = { pages: [], totalPages: 0, truncated: false };
-      }
+      const extractedText = await extractTextFromPdf(file, {
+        maxCharacters: classificationMaxCharacters,
+        maxPages: classificationMaxPages,
+      }).catch(() => {
+        throw new Error(getPdfExtractionFailureMessage());
+      });
+      const textDiagnostics = getPdfTextDiagnostics(extractedText);
 
       const classificationResponse = await fetch(
         `/api/projects/${projectId}/documents/classify`,
         {
           body: JSON.stringify({
             documentId,
+            extractedCharacters: textDiagnostics.extractedCharacters,
             pages: extractedText.pages,
             totalPages: extractedText.totalPages,
             truncated: extractedText.truncated,
@@ -161,6 +164,8 @@ export function PdfDropzone({
         confidence: classification.confidence,
         documentType: classification.documentType,
         error: undefined,
+        pdfHasTextLayer:
+          classification.pdfHasTextLayer ?? textDiagnostics.pdfHasTextLayer,
         status:
           classification.status === "classified"
             ? "classified"
