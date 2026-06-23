@@ -5,13 +5,18 @@ import { getClassificationLimits } from "@/lib/classification/config";
 import {
   CLASSIFICATION_VERSION,
   type ClassificationResult,
-  type TextPage,
 } from "@/lib/classification/types";
 import { extractSimpleFields } from "@/lib/extraction/simple/extractor";
 import { extractComplexFields } from "@/lib/extraction/simple/complex-extractor";
 import { extractFinancialFields } from "@/lib/extraction/simple/financial-extractor";
 import { persistDeterministicExtraction } from "@/lib/extraction/simple/persistence";
+import {
+  extractTextFromPdfBuffer,
+  PdfServerTextExtractionError,
+  type ServerExtractedPdfText,
+} from "@/lib/pdf/extract-text-server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { SOURCE_DOCUMENTS_BUCKET } from "@/lib/upload/constants";
 import { getUploadSessionProjectId } from "@/lib/upload/session";
 import { isUuid } from "@/lib/upload/validation";
 
@@ -24,13 +29,18 @@ type RouteContext = {
 
 type ClassificationPayload = {
   documentId?: unknown;
-  extractedCharacters?: unknown;
-  pages?: unknown;
-  totalPages?: unknown;
-  truncated?: unknown;
 };
 
 class PayloadTooLargeError extends Error {}
+
+function logClassificationDebug(
+  event: string,
+  details: Record<string, unknown>,
+) {
+  if (process.env.NODE_ENV === "development") {
+    console.error(event, details);
+  }
+}
 
 async function readLimitedJson(request: NextRequest, maximumBytes: number) {
   const contentLength = Number(request.headers.get("content-length"));
@@ -69,45 +79,6 @@ async function readLimitedJson(request: NextRequest, maximumBytes: number) {
   return JSON.parse(body) as ClassificationPayload;
 }
 
-function validatePages(
-  value: unknown,
-  maxPages: number,
-  maxCharacters: number,
-) {
-  if (!Array.isArray(value) || value.length > maxPages) {
-    return null;
-  }
-
-  const pages: TextPage[] = [];
-  let characterCount = 0;
-
-  for (const item of value) {
-    if (!item || typeof item !== "object") {
-      return null;
-    }
-
-    const page = item as { pageNumber?: unknown; text?: unknown };
-
-    if (
-      !Number.isInteger(page.pageNumber) ||
-      Number(page.pageNumber) <= 0 ||
-      typeof page.text !== "string"
-    ) {
-      return null;
-    }
-
-    characterCount += page.text.length;
-
-    if (characterCount > maxCharacters) {
-      return null;
-    }
-
-    pages.push({ pageNumber: Number(page.pageNumber), text: page.text });
-  }
-
-  return pages;
-}
-
 export async function POST(request: NextRequest, context: RouteContext) {
   const { projectId } = await context.params;
 
@@ -139,40 +110,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const documentId =
     typeof payload.documentId === "string" ? payload.documentId : "";
-  const totalPages = Number(payload.totalPages);
-  const extractedCharacters = Number(payload.extractedCharacters);
-  const pages = validatePages(
-    payload.pages,
-    limits.maxPages,
-    limits.maxCharacters,
-  );
 
-  if (
-    !isUuid(documentId) ||
-    !pages ||
-    !Number.isInteger(totalPages) ||
-    totalPages < pages.length ||
-    totalPages < 0 ||
-    !Number.isInteger(extractedCharacters) ||
-    extractedCharacters < 0 ||
-    extractedCharacters > limits.maxCharacters ||
-    typeof payload.truncated !== "boolean"
-  ) {
+  if (!isUuid(documentId)) {
     return NextResponse.json(
       { error: "Données de classification invalides." },
-      { status: 400 },
-    );
-  }
-
-  if (
-    pages.some(
-      (page, index) =>
-        page.pageNumber > totalPages ||
-        (index > 0 && page.pageNumber <= pages[index - 1].pageNumber),
-    )
-  ) {
-    return NextResponse.json(
-      { error: "Pagination de classification invalide." },
       { status: 400 },
     );
   }
@@ -216,6 +157,118 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  logClassificationDebug("classification_pdf_storage_download_start", {
+    documentId,
+    storage_path: document.storage_path,
+  });
+
+  const { data: pdfBlob, error: downloadError } = await supabase.storage
+    .from(SOURCE_DOCUMENTS_BUCKET)
+    .download(document.storage_path);
+
+  if (downloadError || !pdfBlob) {
+    logClassificationDebug("classification_pdf_storage_download_failed", {
+      code: downloadError?.name,
+      documentId,
+      errorMessage: downloadError?.message,
+      stage: "storage_download",
+      storage_path: document.storage_path,
+    });
+    return NextResponse.json(
+      { error: "Impossible de récupérer le PDF pour classification." },
+      { status: 500 },
+    );
+  }
+
+  let extractedText: ServerExtractedPdfText;
+  const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
+
+  logClassificationDebug("classification_pdf_storage_download_succeeded", {
+    bufferByteLength: pdfBuffer.byteLength,
+    documentId,
+    isEmpty: pdfBuffer.byteLength === 0,
+    stage: "storage_download",
+    storage_path: document.storage_path,
+  });
+
+  if (pdfBuffer.byteLength === 0) {
+    logClassificationDebug("classification_pdf_storage_download_empty", {
+      bufferByteLength: pdfBuffer.byteLength,
+      documentId,
+      stage: "storage_download_empty",
+      storage_path: document.storage_path,
+    });
+    await supabase
+      .from("documents")
+      .update({
+        classification_status: "failed",
+        error_message: "pdf_storage_object_empty",
+        processing_status: "failed",
+      })
+      .eq("id", documentId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    return NextResponse.json(
+      {
+        error:
+          "Erreur d’extraction PDF : impossible de lire le texte du fichier.",
+      },
+      { status: 500 },
+    );
+  }
+
+  try {
+    extractedText = await extractTextFromPdfBuffer(
+      pdfBuffer,
+      {
+        maxCharacters: limits.maxCharacters,
+        maxPages: limits.maxPages,
+      },
+      {
+        documentId,
+        storagePath: document.storage_path,
+      },
+    );
+  } catch (error) {
+    const diagnostics =
+      error instanceof PdfServerTextExtractionError
+        ? error.diagnostics
+        : undefined;
+
+    logClassificationDebug("classification_pdf_extraction_failed", {
+      bufferByteLength: pdfBuffer.byteLength,
+      documentId,
+      errorMessage:
+        diagnostics?.errorMessage ??
+        (error instanceof Error ? error.message : String(error)),
+      errorName:
+        diagnostics?.errorName ??
+        (error instanceof Error ? error.name : "UnknownError"),
+      errorStack:
+        diagnostics?.stack ?? (error instanceof Error ? error.stack : undefined),
+      pdfjsVersion: diagnostics?.version,
+      stage: diagnostics?.step ?? "unknown_pdf_extraction_step",
+      storage_path: document.storage_path,
+    });
+    await supabase
+      .from("documents")
+      .update({
+        classification_status: "failed",
+        error_message: "pdf_text_extraction_failed",
+        processing_status: "failed",
+      })
+      .eq("id", documentId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    return NextResponse.json(
+      {
+        error:
+          "Erreur d’extraction PDF : impossible de lire le texte du fichier.",
+      },
+      { status: 500 },
+    );
+  }
+
   const { error: processingError } = await supabase
     .from("documents")
     .update({ classification_status: "processing" })
@@ -237,11 +290,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   try {
     const classificationStartedAt = performance.now();
-    result = classifyDocument(pages, {
-      extractedCharacters,
+    result = classifyDocument(extractedText.pages, {
+      extractedCharacters: extractedText.extractedCharacters,
       minCharacters: limits.minCharacters,
-      totalPages,
-      truncated: payload.truncated || totalPages > pages.length,
+      totalPages: extractedText.totalPages,
+      truncated: extractedText.truncated,
     });
     result = {
       ...result,
@@ -305,7 +358,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const extractionContext = {
       classificationStatus: result.status,
       documentType: result.documentType,
-      pages,
+      pages: extractedText.pages,
     };
     const candidates = [
       ...extractSimpleFields(extractionContext),

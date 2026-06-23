@@ -1,11 +1,9 @@
 import { ProjectUploadForm } from "@/components/upload/project-upload-form";
-import { getClassificationLimits } from "@/lib/classification/config";
 import { getUploadConfig } from "@/lib/upload/config";
 
 export default function AnalysePage() {
   const { maxFiles, maxPdfSizeBytes, maxPdfSizeMb, retentionHours } =
     getUploadConfig();
-  const { maxCharacters, maxPages } = getClassificationLimits();
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-16">
@@ -21,8 +19,6 @@ export default function AnalysePage() {
       </div>
 
       <ProjectUploadForm
-        classificationMaxCharacters={maxCharacters}
-        classificationMaxPages={maxPages}
         maxFiles={maxFiles}
         maxPdfSizeBytes={maxPdfSizeBytes}
         maxPdfSizeMb={maxPdfSizeMb}
