@@ -36,9 +36,7 @@ export function createUploadSession(projectId: string) {
   };
 }
 
-export function getUploadSessionProjectId(request: NextRequest) {
-  const value = request.cookies.get(UPLOAD_SESSION_COOKIE)?.value;
-
+export function getUploadSessionProjectIdFromValue(value?: string) {
   if (!value) {
     return null;
   }
@@ -70,4 +68,10 @@ export function getUploadSessionProjectId(request: NextRequest) {
   }
 
   return projectId;
+}
+
+export function getUploadSessionProjectId(request: NextRequest) {
+  return getUploadSessionProjectIdFromValue(
+    request.cookies.get(UPLOAD_SESSION_COOKIE)?.value,
+  );
 }

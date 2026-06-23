@@ -104,6 +104,99 @@ Mandat du syndic du 1 juillet 2025 au 30 juin 2028.`,
     );
   });
 
+  it("prefers the AG title date over a letter date in Foncia minutes", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "pv_ag",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `Le 09 mai 2023, M. Arnaud BEUGNETTE
+Procès-verbal de l'assemblée générale spéciale du 14 avril 2023 à 14h00
+Votre gestionnaire Gaelle ARNOULD`,
+        },
+      ],
+    });
+
+    expect(candidates).toContainEqual(
+      expect.objectContaining({
+        fieldId: "last_age_date",
+        matchedRule: "ag.extraordinary_title_date",
+        value: "2023-04-14",
+      }),
+    );
+  });
+
+  it("extracts Foncia agency, manager and residence address blocks", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "appel_de_fonds",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `VOTRE AGENCE FONCIA Foncia Nancy - Tour Thiers 4 rue Piroux Tour Thiers 54000 Nancy 03 83 32 19 64
+VOTRE GESTIONNAIRE Gaelle ARNOULD
+VOTRE MODE DE PAIEMENT Paiement par prélèvement automatique
+LA PLEIADE 6 AVENUE DU GENERAL LECLERC 54500 VANDOEUVRE LES NANCY
+Montant à payer 29,95 €`,
+        },
+      ],
+    });
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldId: "syndic_name",
+          matchedRule: "syndic.foncia_agency_block",
+          value: "Foncia Nancy - Tour Thiers",
+        }),
+        expect.objectContaining({
+          fieldId: "syndic_manager",
+          matchedRule: "syndic.foncia_manager_block",
+          value: "Gaelle ARNOULD",
+        }),
+        expect.objectContaining({
+          fieldId: "property_address",
+          matchedRule: "property.foncia_residence_address_block",
+          value: "LA PLEIADE 6 AVENUE DU GENERAL LECLERC 54500 VANDOEUVRE LES NANCY",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects a Foncia client email and keeps the agency manager email", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "appel_de_fonds",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `VOS RÉFÉRENCES CLIENT
+Numéro client : 001383863
+Identifiant MyFoncia : c.beugnette@gmail.com
+VOTRE ESPACE CLIENT Retrouvez l'ensemble des informations de votre compte.
+VOTRE AGENCE FONCIA Foncia Nancy - Tour Thiers 4 rue Piroux 54000 Nancy
+VOTRE GESTIONNAIRE Gaelle ARNOULD gaelle.arnould@foncia.com
+Contactez-nous pour toute question.`,
+        },
+      ],
+    });
+
+    expect(candidates).toContainEqual(
+      expect.objectContaining({
+        fieldId: "syndic_email",
+        matchedRule: "syndic.email_near_contact_block",
+        value: "gaelle.arnould@foncia.com",
+      }),
+    );
+    expect(candidates).not.toContainEqual(
+      expect.objectContaining({
+        fieldId: "syndic_email",
+        value: "c.beugnette@gmail.com",
+      }),
+    );
+  });
+
   it("keeps the missing side of a mandate absent when only one date is detected", () => {
     const candidates = extractSimpleFields({
       classificationStatus: "classified",

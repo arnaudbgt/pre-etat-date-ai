@@ -25,9 +25,15 @@ const PROPERTY_DOCUMENT_TYPES = new Set([
 ]);
 
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const EMAIL_NEGATIVE_CONTEXT =
+  /\b(?:identifiant\s+myfoncia|espace\s+client|num[ée]ro\s+client|r[ée]f[ée]rences?\s+client|compte\s+client|mon\s+compte|copropri[ée]taire|propri[ée]taire)\b/;
+const EMAIL_POSITIVE_CONTEXT =
+  /\b(?:votre\s+agence|agence|syndic|cabinet|gestionnaire|votre\s+gestionnaire|contact|contactez\s+nous|contactez-nous|administrateur\s+de\s+biens)\b/;
 const PHONE_PATTERN = /(?:\+33|0033|0)[1-9](?:[\s.()\-]*\d{2}){4}\b/g;
 const ADDRESS_PATTERN =
   /\b\d{1,4}(?:\s*(?:bis|ter))?\s+(?:rue|avenue|av\.?|boulevard|bd\.?|chemin|impasse|allee|allée|place|route|quai|cours|square)\s+[^\n,;]{2,70}(?:(?:,|\s)+\d{5}\s+[A-Za-zÀ-ÿ'’\- ]{2,50})?/i;
+const FONCIA_PROPERTY_ADDRESS_PATTERN =
+  /\b[A-ZÀ-Ÿ0-9][A-ZÀ-Ÿ0-9'’\- ]{2,60}\s+\d{1,4}(?:\s*(?:bis|ter))?\s+(?:RUE|AVENUE|AV\.?|BOULEVARD|BD\.?|CHEMIN|IMPASSE|ALLEE|ALLÉE|PLACE|ROUTE|QUAI|COURS|SQUARE)\s+[A-ZÀ-Ÿ0-9'’\- ]{2,80}\s+\d{5}\s+[A-ZÀ-Ÿ'’\- ]{2,60}\b/g;
 
 function adjustedConfidence(
   confidence: number,
@@ -158,10 +164,163 @@ function addAddressNearMarker(
   }
 }
 
+export type SyndicEmailCandidateDiagnostic = {
+  confidence: number | null;
+  excerpt: string;
+  matchedRule: string | null;
+  page: number;
+  rejected: boolean;
+  rejectionReason: string | null;
+  value: string;
+};
+
+export function analyzeSyndicEmailCandidates(
+  context: SimpleExtractionContext,
+) {
+  const candidates: SyndicEmailCandidateDiagnostic[] = [];
+  const accepted: Array<
+    SyndicEmailCandidateDiagnostic & {
+      priority: number;
+      start: number;
+      pageRef: TextPage;
+    }
+  > = [];
+
+  for (const page of context.pages.slice(0, 3)) {
+    for (const match of page.text.matchAll(EMAIL_PATTERN)) {
+      if (match.index === undefined) {
+        continue;
+      }
+
+      const negativeContext = normalizeComparable(
+        page.text.slice(
+          Math.max(0, match.index - 160),
+          match.index + match[0].length + 80,
+        ),
+      );
+      const positiveContext = normalizeComparable(
+        page.text.slice(
+          Math.max(0, match.index - 450),
+          match.index + match[0].length + 180,
+        ),
+      );
+      const immediatePositiveContext = normalizeComparable(
+        page.text.slice(
+          Math.max(0, match.index - 120),
+          match.index + match[0].length + 80,
+        ),
+      );
+      const excerpt = sourceExcerpt(
+        page.text,
+        match.index,
+        match.index + match[0].length,
+      );
+
+      if (
+        EMAIL_NEGATIVE_CONTEXT.test(negativeContext) &&
+        !EMAIL_POSITIVE_CONTEXT.test(immediatePositiveContext)
+      ) {
+        candidates.push({
+          confidence: null,
+          excerpt,
+          matchedRule: null,
+          page: page.pageNumber,
+          rejected: true,
+          rejectionReason: "client_context",
+          value: match[0].toLowerCase(),
+        });
+        continue;
+      }
+
+      if (!EMAIL_POSITIVE_CONTEXT.test(positiveContext)) {
+        candidates.push({
+          confidence: null,
+          excerpt,
+          matchedRule: null,
+          page: page.pageNumber,
+          rejected: true,
+          rejectionReason: "weak_context",
+          value: match[0].toLowerCase(),
+        });
+        continue;
+      }
+
+      const priority = /votre\s+gestionnaire|gestionnaire/.test(
+        positiveContext,
+      )
+        ? 3
+        : /votre\s+agence|agence|syndic|cabinet/.test(positiveContext)
+          ? 2
+          : 1;
+      const acceptedCandidate = {
+        confidence: adjustedConfidence(92, context),
+        excerpt,
+        matchedRule: "syndic.email_near_contact_block",
+        page: page.pageNumber,
+        pageRef: page,
+        priority,
+        rejected: false,
+        rejectionReason: null,
+        start: match.index,
+        value: match[0].toLowerCase(),
+      };
+      candidates.push(acceptedCandidate);
+      accepted.push(acceptedCandidate);
+    }
+  }
+
+  const clientContextEmails = new Set(
+    candidates
+      .filter((candidate) => candidate.rejectionReason === "client_context")
+      .map((candidate) => candidate.value),
+  );
+
+  for (const candidate of candidates) {
+    if (!candidate.rejected && clientContextEmails.has(candidate.value)) {
+      candidate.rejected = true;
+      candidate.rejectionReason = "duplicate_client_context";
+      candidate.confidence = null;
+      candidate.matchedRule = null;
+    }
+  }
+
+  const selected =
+    accepted
+      .filter((candidate) => !candidate.rejected)
+      .sort(
+      (left, right) =>
+        right.priority - left.priority ||
+        (right.confidence ?? 0) - (left.confidence ?? 0) ||
+        left.start - right.start,
+      )[0] ?? null;
+
+  return {
+    candidates,
+    rejectedCandidates: candidates.filter((candidate) => candidate.rejected),
+    selectedCandidate: selected,
+  };
+}
+
 function addContactCandidates(
   candidates: SimpleFieldCandidate[],
   context: SimpleExtractionContext,
 ) {
+  addLabeledCandidate(
+    candidates,
+    context,
+    "syndic_name",
+    /VOTRE\s+AGENCE\s+FONCIA\s+(Foncia\s+[A-Za-zÀ-ÿ'’\- ]+(?:\s+-\s+[A-Za-zÀ-ÿ'’\- ]+)?)(?=\s+\d|\s+VOTRE\s+GESTIONNAIRE|\s*$)/i,
+    92,
+    "syndic.foncia_agency_block",
+  );
+  addLabeledCandidate(
+    candidates,
+    context,
+    "syndic_manager",
+    /VOTRE\s+GESTIONNAIRE\s+([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'’\- ]{2,80}?)(?=\s+(?:VOTRE\s+MODE|VOTRE\s+ESPACE|Paiement|\+?\d|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})|$)/i,
+    92,
+    "syndic.foncia_manager_block",
+  );
   addLabeledCandidate(
     candidates,
     context,
@@ -195,45 +354,28 @@ function addContactCandidates(
     "syndic.address_label",
   );
 
-  for (const page of context.pages.slice(0, 3)) {
-    for (const match of page.text.matchAll(EMAIL_PATTERN)) {
-      if (match.index === undefined) {
-        continue;
-      }
+  const emailDiagnostics = analyzeSyndicEmailCandidates(context);
+  const selectedEmail = emailDiagnostics.selectedCandidate;
 
-      const nearby = normalizeComparable(
-        page.text.slice(
-          Math.max(0, match.index - 450),
-          match.index + match[0].length + 80,
-        ),
-      );
+  if (selectedEmail) {
+    const found = candidate(
+      context,
+      selectedEmail.pageRef,
+      "syndic_email",
+      selectedEmail.value,
+      selectedEmail.confidence ?? 92,
+      selectedEmail.matchedRule ?? "syndic.email_near_contact_block",
+      selectedEmail.start,
+      selectedEmail.start + selectedEmail.value.length,
+      (value) => value.toLowerCase(),
+    );
 
-      if (
-        !/(syndic|gestionnaire|agence|contact|administrateur de biens)/.test(
-          nearby,
-        )
-      ) {
-        continue;
-      }
-
-      const found = candidate(
-        context,
-        page,
-        "syndic_email",
-        match[0],
-        92,
-        "syndic.email_near_contact_block",
-        match.index,
-        match.index + match[0].length,
-        (value) => value.toLowerCase(),
-      );
-
-      if (found) {
-        candidates.push(found);
-        break;
-      }
+    if (found) {
+      candidates.push(found);
     }
+  }
 
+  for (const page of context.pages.slice(0, 3)) {
     for (const match of page.text.matchAll(PHONE_PATTERN)) {
       if (match.index === undefined) {
         continue;
@@ -274,6 +416,34 @@ function addPropertyAddress(
   candidates: SimpleFieldCandidate[],
   context: SimpleExtractionContext,
 ) {
+  for (const page of context.pages.slice(0, 3)) {
+    for (const match of page.text.matchAll(FONCIA_PROPERTY_ADDRESS_PATTERN)) {
+      if (match.index === undefined) {
+        continue;
+      }
+
+      if (/\b(?:FONCIA|RCS|CARTE|GARANT|CAPITAL)\b/.test(match[0])) {
+        continue;
+      }
+
+      const found = candidate(
+        context,
+        page,
+        "property_address",
+        match[0],
+        90,
+        "property.foncia_residence_address_block",
+        match.index,
+        match.index + match[0].length,
+      );
+
+      if (found) {
+        candidates.push(found);
+        return;
+      }
+    }
+  }
+
   addAddressNearMarker(
     candidates,
     context,
@@ -294,6 +464,30 @@ function findAgDate(page: TextPage, kind?: "ordinary" | "extraordinary") {
       : kind === "extraordinary"
         ? "(?:assembl[ée]e\\s+g[ée]n[ée]rale\\s+(?:extraordinaire|sp[ée]ciale)|a\\.?g\\.?e\\.?)"
         : "(?:assembl[ée]e\\s+g[ée]n[ée]rale(?:\\s+(?:ordinaire|extraordinaire|sp[ée]ciale))?|a\\.?g\\.?[oe]?\\.?)";
+  const titleKindPattern =
+    kind === "ordinary"
+      ? "(?:ordinaire|a\\.?g\\.?o\\.?)"
+      : kind === "extraordinary"
+        ? "(?:(?:extraordinaire|sp[ée]ciale|a\\.?g\\.?s\\.?|a\\.?g\\.?e\\.?)\\s+)?"
+        : "(?:ordinaire|extraordinaire|sp[ée]ciale|a\\.?g\\.?[ose]?\\.?)?";
+  const titlePattern = new RegExp(
+    `proc[èée]s[-\\s]?verbal\\s+de\\s+l(?:['’]|9)assembl[ée]e\\s+g[ée]n[ée]rale\\s+${titleKindPattern}[\\s\\S]{0,260}`,
+    "i",
+  );
+  const titleMatch = titlePattern.exec(page.text);
+
+  if (titleMatch?.index !== undefined) {
+    const titleDate = findDates(titleMatch[0])[0];
+
+    if (titleDate) {
+      return {
+        ...titleDate,
+        end: titleMatch.index + titleDate.end,
+        start: titleMatch.index + titleDate.start,
+      };
+    }
+  }
+
   const anchor = new RegExp(kindPattern, "i").exec(page.text);
 
   if (!anchor || anchor.index === undefined) {
@@ -301,7 +495,14 @@ function findAgDate(page: TextPage, kind?: "ordinary" | "extraordinary") {
   }
 
   const originalWindow = page.text.slice(anchor.index, anchor.index + 350);
-  const date = findDates(originalWindow)[0];
+  const date = findDates(originalWindow).find((item) => {
+    const before = page.text
+      .slice(Math.max(0, anchor.index + item.start - 8), anchor.index + item.end)
+      .toLowerCase();
+    return !/\ble\s+\d{1,2}\s+[a-zéû]+\s+\d{4},?\s+(?:m\.|mme|monsieur|madame)\b/i.test(
+      before,
+    );
+  });
 
   if (!date) {
     return null;

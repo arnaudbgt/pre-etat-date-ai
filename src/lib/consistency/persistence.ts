@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getEffectiveDocumentType } from "@/lib/documents/document-types";
 
 import { evaluateProjectConsistency } from "./evaluator";
 import type {
@@ -60,7 +61,7 @@ export async function evaluateAndPersistProjectConsistency(
 
   const { data: documents, error: documentsError } = await supabase
     .from("documents")
-    .select("id, classification_status, document_type")
+    .select("id, classification_status, document_type, document_type_override")
     .eq("project_id", projectId)
     .is("deleted_at", null);
 
@@ -102,7 +103,7 @@ export async function evaluateAndPersistProjectConsistency(
     documents: documents.map(
       (document): ConsistencyDocument => ({
         classificationStatus: document.classification_status,
-        documentType: document.document_type,
+        documentType: getEffectiveDocumentType(document),
         id: document.id,
       }),
     ),

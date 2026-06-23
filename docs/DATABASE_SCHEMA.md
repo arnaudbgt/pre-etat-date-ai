@@ -29,7 +29,7 @@ Contient la valeur consolidée d'un champ du rapport. `value` accepte une struct
 
 ## `extracted_field_sources`
 
-Associe un champ à toutes les pièces qui le justifient. La page, un repère structuré et un court extrait peuvent être conservés. L'extrait est limité à 2 000 caractères afin de ne pas transformer cette table en stockage du texte OCR complet.
+Associe un champ à toutes les pièces qui le justifient. La page, un repère structuré et un court extrait peuvent être conservés. Depuis le Sprint 4A, l'extrait est limité à 200 caractères afin de ne pas transformer cette table en stockage du texte OCR complet.
 
 ## `reports`
 

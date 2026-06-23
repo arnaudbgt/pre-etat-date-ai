@@ -25,9 +25,11 @@ export type Database = {
           deleted_reason: string | null;
           detected_syndic: string | null;
           document_type: Database["public"]["Enums"]["document_type"];
+          document_type_override: Database["public"]["Enums"]["document_type"] | null;
           error_message: string | null;
           filename: string;
           id: string;
+          is_document_type_manual: boolean;
           mime_type: string;
           processing_status: Database["public"]["Enums"]["document_processing_status"];
           project_id: string;
@@ -47,9 +49,11 @@ export type Database = {
           deleted_reason?: string | null;
           detected_syndic?: string | null;
           document_type?: Database["public"]["Enums"]["document_type"];
+          document_type_override?: Database["public"]["Enums"]["document_type"] | null;
           error_message?: string | null;
           filename: string;
           id?: string;
+          is_document_type_manual?: boolean;
           mime_type?: string;
           processing_status?: Database["public"]["Enums"]["document_processing_status"];
           project_id: string;
@@ -69,9 +73,11 @@ export type Database = {
           deleted_reason?: string | null;
           detected_syndic?: string | null;
           document_type?: Database["public"]["Enums"]["document_type"];
+          document_type_override?: Database["public"]["Enums"]["document_type"] | null;
           error_message?: string | null;
           filename?: string;
           id?: string;
+          is_document_type_manual?: boolean;
           mime_type?: string;
           processing_status?: Database["public"]["Enums"]["document_processing_status"];
           project_id?: string;
@@ -144,8 +150,10 @@ export type Database = {
         Row: {
           confidence: number | null;
           created_at: string;
+          edited_by_user_at: string | null;
           extraction_version: string;
           field_id: string;
+          field_origin: "automatic" | "manual" | "validated";
           id: string;
           label: string;
           manually_edited: boolean;
@@ -160,8 +168,10 @@ export type Database = {
         Insert: {
           confidence?: number | null;
           created_at?: string;
+          edited_by_user_at?: string | null;
           extraction_version?: string;
           field_id: string;
+          field_origin?: "automatic" | "manual" | "validated";
           id?: string;
           label: string;
           manually_edited?: boolean;
@@ -176,8 +186,10 @@ export type Database = {
         Update: {
           confidence?: number | null;
           created_at?: string;
+          edited_by_user_at?: string | null;
           extraction_version?: string;
           field_id?: string;
+          field_origin?: "automatic" | "manual" | "validated";
           id?: string;
           label?: string;
           manually_edited?: boolean;
