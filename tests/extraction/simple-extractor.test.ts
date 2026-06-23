@@ -127,6 +127,86 @@ Votre gestionnaire Gaelle ARNOULD`,
     );
   });
 
+  it("ignores notification dates and keeps the AG title date for approvals", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "pv_ag",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `Notification adressée le 09 mai 2023
+Procès-verbal de l'assemblée générale spéciale du 14 avril 2023 à 14h00
+5. APPROBATION DES COMPTES
+Après délibération, l'assemblée adopte la résolution.`,
+        },
+      ],
+    });
+
+    expect(candidates).toContainEqual(
+      expect.objectContaining({
+        fieldId: "approval_date",
+        value: "2023-04-14",
+      }),
+    );
+    expect(candidates).not.toContainEqual(
+      expect.objectContaining({
+        value: "2023-05-09",
+      }),
+    );
+  });
+
+  it("extracts owner-associated lot tantiemes without using voting tantiemes", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "pv_ag",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `VOS TANTIÈMES
+Référence copropriétaire : 001383863
+Lot n° A42
+Tantièmes : 42100/10250000
+
+Résultat du vote : pour 8000 tantièmes, contre 1200 tantièmes.`,
+        },
+      ],
+    });
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldId: "lot_number",
+          matchedRule: "lot.explicit_owner_associated_lot",
+          value: "A42",
+        }),
+        expect.objectContaining({
+          fieldId: "lot_tantiemes",
+          matchedRule: "lot.explicit_owner_associated_tantiemes",
+          value: "42100/10250000",
+        }),
+      ]),
+    );
+  });
+
+  it("leaves lot tantiemes missing when only vote totals are present", () => {
+    const candidates = extractSimpleFields({
+      classificationStatus: "classified",
+      documentType: "pv_ag",
+      pages: [
+        {
+          pageNumber: 1,
+          text: `Résolution 5 — Travaux
+Résultat du vote : pour 8000 tantièmes, contre 1200 tantièmes.
+La résolution est adoptée.`,
+        },
+      ],
+    });
+
+    expect(candidates.some((item) => item.fieldId === "lot_tantiemes")).toBe(
+      false,
+    );
+  });
+
   it("extracts Foncia agency, manager and residence address blocks", () => {
     const candidates = extractSimpleFields({
       classificationStatus: "classified",

@@ -27,6 +27,13 @@ type DetectedAmount = {
   window: string;
 };
 
+type TextBlock = {
+  end: number;
+  page: TextPage;
+  start: number;
+  text: string;
+};
+
 function adjustedConfidence(
   confidence: number,
   context: SimpleExtractionContext,
@@ -75,6 +82,35 @@ function detectAmountAfterLabel(
   }
 
   return null;
+}
+
+function normalizePvComparable(value: string) {
+  return normalizeComparable(value).replace(
+    /\b(?:[a-z]\s+){2,}[a-z]\b/g,
+    (match) => match.replace(/\s+/g, ""),
+  );
+}
+
+function pvBlocks(page: TextPage): TextBlock[] {
+  const starts = new Set<number>([0]);
+  const boundary =
+    /(?:^|\n)\s*(?=(?:r[ée]solution\s*(?:n[°o]|num[ée]ro)?\s*\d+(?:\.\d+)*|\d+(?:\.\d+)*\s*[.)-]?\s+))/gim;
+
+  for (const match of page.text.matchAll(boundary)) {
+    if (match.index !== undefined) starts.add(match.index + match[0].length);
+  }
+
+  const ordered = [...starts].sort((left, right) => left - right);
+  return ordered
+    .map((start, index) => {
+      const end = ordered[index + 1] ?? page.text.length;
+      return { end, page, start, text: page.text.slice(start, end).trim() };
+    })
+    .filter((block) => block.text.length > 0);
+}
+
+function allPvBlocks(context: SimpleExtractionContext) {
+  return context.pages.flatMap(pvBlocks);
 }
 
 function amountCandidate(
@@ -291,10 +327,26 @@ function addCurrentQuarter(
 
 function findAgSessionDate(pages: TextPage[]) {
   for (const page of pages.slice(0, 3)) {
-    const anchor = /assembl[ée]e\s+g[ée]n[ée]rale[^\n]{0,120}/i.exec(page.text);
+    const title =
+      /(?:proc[èe]s[\s-]*verbal\s+de\s+l['’]?assembl[ée]e\s+g[ée]n[ée]rale|assembl[ée]e\s+g[ée]n[ée]rale)[\s\S]{0,260}/i.exec(
+        page.text,
+      );
+    if (title?.index !== undefined) {
+      const date = findDates(title[0])[0];
+      if (date) {
+        return {
+          date,
+          end: title.index + date.end,
+          page,
+          start: title.index + date.start,
+        };
+      }
+    }
+
+    const anchor = /assembl[ée]e\s+g[ée]n[ée]rale[^\n]{0,160}/i.exec(page.text);
     if (!anchor || anchor.index === undefined) continue;
     const date = findDates(
-      page.text.slice(anchor.index, anchor.index + 260),
+      page.text.slice(anchor.index, anchor.index + 350),
     )[0];
     if (!date) continue;
     return {
@@ -305,6 +357,56 @@ function findAgSessionDate(pages: TextPage[]) {
     };
   }
   return null;
+}
+
+function addPvAnnualBudgetAmount(
+  candidates: SimpleFieldCandidate[],
+  context: SimpleExtractionContext,
+) {
+  if (context.documentType !== "pv_ag") return;
+
+  for (const block of allPvBlocks(context)) {
+    const normalized = normalizePvComparable(block.text);
+    if (
+      !/\bbudget previsionnel\b/.test(normalized) ||
+      !/\b(adopte|adoptee|vote favorable|votes pour|approuve|approuvee)\b/.test(
+        normalized,
+      ) ||
+      /\b(rejete|rejetee|non adopte|non adoptee)\b/.test(normalized)
+    ) {
+      continue;
+    }
+
+    const label =
+      /(?:budget\s+pr[ée]visionnel(?:\s+(?:annuel|de\s+l['’]exercice))?|montant\s+(?:du\s+)?budget\s+pr[ée]visionnel|budget\s+soumis\s+au\s+vote)/i.exec(
+        block.text,
+      );
+    if (!label?.index && label?.index !== 0) continue;
+
+    const window = block.text.slice(label.index, label.index + 700);
+    const amounts = findMoneyAmounts(window);
+    if (amounts.length === 0) continue;
+    const amount = amounts[0];
+    candidates.push({
+      confidence: adjustedConfidence(amounts.length > 1 ? 84 : 94, context),
+      excerpt: sourceExcerpt(
+        block.page.text,
+        block.start + label.index,
+        block.start + label.index + amount.end,
+      ),
+      extractionVersion: FINANCIAL_EXTRACTION_VERSION,
+      fieldId: "annual_budget_amount",
+      matchKey: `${block.page.pageNumber}:pv_budget:${block.start + label.index + amount.start}:${block.start + label.index + amount.end}`,
+      matchedRule:
+        amounts.length > 1
+          ? "financial.pv_budget_resolution_ambiguous_amount"
+          : "financial.pv_budget_resolution_amount",
+      normalizedValue: normalizedDecimal(Math.abs(amount.amount)),
+      page: block.page.pageNumber,
+      value: Math.abs(amount.amount),
+    });
+    return;
+  }
 }
 
 function addBudgetVoteDate(
@@ -433,6 +535,44 @@ function addWorksFundPercentage(
     });
     return;
   }
+
+  if (context.documentType !== "pv_ag") return;
+
+  for (const block of allPvBlocks(context)) {
+    const normalized = normalizePvComparable(block.text);
+    if (
+      !/\bfonds (?:de )?travaux\b/.test(normalized) ||
+      !/\b(?:cotisation obligatoire|budget previsionnel|pourcentage|du budget)\b/.test(
+        normalized,
+      ) ||
+      /\b(rejete|rejetee|non adopte|non adoptee)\b/.test(normalized)
+    ) {
+      continue;
+    }
+
+    const values = findPercentages(block.text);
+    if (values.length === 0) continue;
+    const value = values[0];
+    candidates.push({
+      confidence: adjustedConfidence(values.length > 1 ? 84 : 94, context),
+      excerpt: sourceExcerpt(
+        block.page.text,
+        block.start + value.start,
+        block.start + value.end,
+      ),
+      extractionVersion: FINANCIAL_EXTRACTION_VERSION,
+      fieldId: "works_fund_budget_percentage",
+      matchKey: `${block.page.pageNumber}:pv_works_fund_percentage:${block.start + value.start}:${block.start + value.end}`,
+      matchedRule:
+        values.length > 1
+          ? "financial.pv_works_fund_percentage_ambiguous"
+          : "financial.pv_works_fund_percentage",
+      normalizedValue: value.normalizedValue,
+      page: block.page.pageNumber,
+      value: value.value,
+    });
+    return;
+  }
 }
 
 function markSharedAmountsUncertain(candidates: SimpleFieldCandidate[]) {
@@ -500,6 +640,7 @@ export function extractFinancialFields(context: SimpleExtractionContext) {
       matchedRule: "financial.explicit_annual_budget",
       rejectWindow: /(?:votre\s+quote[\s-]*part|quote[\s-]*part\s+vendeur)/i,
     });
+    addPvAnnualBudgetAmount(candidates, context);
   }
   addBudgetVoteDate(candidates, context);
 

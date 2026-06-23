@@ -259,6 +259,38 @@ export type Database = {
           },
         ];
       };
+      project_owner_context: {
+        Row: {
+          created_at: string;
+          known_lot_number: string | null;
+          owner_name: string;
+          project_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          known_lot_number?: string | null;
+          owner_name: string;
+          project_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          known_lot_number?: string | null;
+          owner_name?: string;
+          project_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_owner_context_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: true;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       projects: {
         Row: {
           created_at: string;

@@ -48,11 +48,6 @@ const additionalCatalogFields: Array<
     section: "identification_vendeur",
   },
   {
-    fieldId: "lot_number",
-    label: "Numéro des lots vendus",
-    section: "lots_vendus",
-  },
-  {
     fieldId: "payment_method",
     label: "Mode de paiement habituel",
     section: "situation_financiere_vendeur",

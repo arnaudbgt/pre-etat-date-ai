@@ -40,6 +40,18 @@ export const SIMPLE_FIELD_DEFINITIONS = [
     section: "identification_immeuble",
   },
   {
+    fieldId: "lot_number",
+    extractionVersion: SIMPLE_EXTRACTION_VERSION,
+    label: "Numéro des lots vendus",
+    section: "lots_vendus",
+  },
+  {
+    fieldId: "lot_tantiemes",
+    extractionVersion: SIMPLE_EXTRACTION_VERSION,
+    label: "Tantièmes des lots vendus",
+    section: "lots_vendus",
+  },
+  {
     fieldId: "approval_date",
     extractionVersion: SIMPLE_EXTRACTION_VERSION,
     label: "Date d’approbation des comptes",

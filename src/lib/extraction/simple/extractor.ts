@@ -34,6 +34,17 @@ const ADDRESS_PATTERN =
   /\b\d{1,4}(?:\s*(?:bis|ter))?\s+(?:rue|avenue|av\.?|boulevard|bd\.?|chemin|impasse|allee|allée|place|route|quai|cours|square)\s+[^\n,;]{2,70}(?:(?:,|\s)+\d{5}\s+[A-Za-zÀ-ÿ'’\- ]{2,50})?/i;
 const FONCIA_PROPERTY_ADDRESS_PATTERN =
   /\b[A-ZÀ-Ÿ0-9][A-ZÀ-Ÿ0-9'’\- ]{2,60}\s+\d{1,4}(?:\s*(?:bis|ter))?\s+(?:RUE|AVENUE|AV\.?|BOULEVARD|BD\.?|CHEMIN|IMPASSE|ALLEE|ALLÉE|PLACE|ROUTE|QUAI|COURS|SQUARE)\s+[A-ZÀ-Ÿ0-9'’\- ]{2,80}\s+\d{5}\s+[A-ZÀ-Ÿ'’\- ]{2,60}\b/g;
+const PV_LETTER_DATE_CONTEXT =
+  /\b(?:courrier|convocation|notification|lettre|recommand[ée]|accus[ée]\s+de\s+r[ée]ception)\b/i;
+const VOTE_TANTIEMES_CONTEXT =
+  /\b(?:r[ée]sultat\s+du\s+vote|votes?\s+pour|contre|abstention|majorit[ée]|voix|tanti[èe]mes\s+de\s+vote)\b/;
+
+function normalizePvComparable(value: string) {
+  return normalizeComparable(value).replace(
+    /\b(?:[a-z]\s+){2,}[a-z]\b/g,
+    (match) => match.replace(/\s+/g, ""),
+  );
+}
 
 function adjustedConfidence(
   confidence: number,
@@ -471,13 +482,16 @@ function findAgDate(page: TextPage, kind?: "ordinary" | "extraordinary") {
         ? "(?:(?:extraordinaire|sp[ée]ciale|a\\.?g\\.?s\\.?|a\\.?g\\.?e\\.?)\\s+)?"
         : "(?:ordinaire|extraordinaire|sp[ée]ciale|a\\.?g\\.?[ose]?\\.?)?";
   const titlePattern = new RegExp(
-    `proc[èée]s[-\\s]?verbal\\s+de\\s+l(?:['’]|9)assembl[ée]e\\s+g[ée]n[ée]rale\\s+${titleKindPattern}[\\s\\S]{0,260}`,
+    `(?:proc[èée]s[-\\s]?verbal\\s+de\\s+l(?:['’]|9)assembl[ée]e\\s+g[ée]n[ée]rale|assembl[ée]e\\s+g[ée]n[ée]rale)\\s+${titleKindPattern}[\\s\\S]{0,260}`,
     "i",
   );
   const titleMatch = titlePattern.exec(page.text);
 
   if (titleMatch?.index !== undefined) {
-    const titleDate = findDates(titleMatch[0])[0];
+    const titleDate = findDates(titleMatch[0]).find((date) => {
+      const beforeDate = titleMatch[0].slice(Math.max(0, date.start - 120), date.start);
+      return !PV_LETTER_DATE_CONTEXT.test(beforeDate);
+    });
 
     if (titleDate) {
       return {
@@ -494,13 +508,15 @@ function findAgDate(page: TextPage, kind?: "ordinary" | "extraordinary") {
     return null;
   }
 
-  const originalWindow = page.text.slice(anchor.index, anchor.index + 350);
+  const originalWindow = page.text.slice(anchor.index, anchor.index + 450);
   const date = findDates(originalWindow).find((item) => {
-    const before = page.text
-      .slice(Math.max(0, anchor.index + item.start - 8), anchor.index + item.end)
-      .toLowerCase();
-    return !/\ble\s+\d{1,2}\s+[a-zéû]+\s+\d{4},?\s+(?:m\.|mme|monsieur|madame)\b/i.test(
-      before,
+    const before = originalWindow.slice(Math.max(0, item.start - 140), item.start);
+    const around = originalWindow.slice(Math.max(0, item.start - 140), item.end + 80);
+    return (
+      !PV_LETTER_DATE_CONTEXT.test(before) &&
+      !/\ble\s+\d{1,2}\s+[a-zéû]+\s+\d{4},?\s+(?:m\.|mme|monsieur|madame)\b/i.test(
+        around,
+      )
     );
   });
 
@@ -513,6 +529,102 @@ function findAgDate(page: TextPage, kind?: "ordinary" | "extraordinary") {
     end: anchor.index + date.end,
     start: anchor.index + date.start,
   };
+}
+
+function pvBlocks(page: TextPage) {
+  const starts = new Set<number>([0]);
+  const boundary =
+    /(?:^|\n)\s*(?=(?:r[ée]solution\s*(?:n[°o]|num[ée]ro)?\s*\d+(?:\.\d+)*|\d+(?:\.\d+)*\s*[.)-]?\s+))/gim;
+
+  for (const match of page.text.matchAll(boundary)) {
+    if (match.index !== undefined) starts.add(match.index + match[0].length);
+  }
+
+  if (starts.size === 1) {
+    const paragraph = /\n\s*\n+/g;
+    for (const match of page.text.matchAll(paragraph)) {
+      if (match.index !== undefined) starts.add(match.index + match[0].length);
+    }
+  }
+
+  const ordered = [...starts].sort((left, right) => left - right);
+  return ordered
+    .map((start, index) => {
+      const end = ordered[index + 1] ?? page.text.length;
+      return { end, page, start, text: page.text.slice(start, end).trim() };
+    })
+    .filter((block) => block.text.length > 0);
+}
+
+function addLotCandidates(
+  candidates: SimpleFieldCandidate[],
+  context: SimpleExtractionContext,
+) {
+  if (context.documentType !== "pv_ag" && context.documentType !== "fiche_synthetique") {
+    return;
+  }
+
+  for (const page of context.pages.slice(0, 5)) {
+    for (const block of pvBlocks(page)) {
+      const normalized = normalizePvComparable(block.text);
+      const hasExplicitOwnerAssociation =
+        /\b(vos lots?|vos tantiemes|reference coproprietaire|references coproprietaire|numero coproprietaire|compte coproprietaire|coproprietaire vendeur|vendeur)\b/.test(
+          normalized,
+        );
+
+      if (!hasExplicitOwnerAssociation || VOTE_TANTIEMES_CONTEXT.test(normalized)) {
+        continue;
+      }
+
+      const lotMatch =
+        /(?:lots?\s*(?:n[°o]|num[ée]ro)?|n[°o]\s+de\s+lot)\s*[:\-]?\s*([A-Z0-9][A-Z0-9, /.-]{0,80})/i.exec(
+          block.text,
+        );
+
+      if (lotMatch?.index !== undefined) {
+        const value = lotMatch[1]
+          .replace(/\s+/g, " ")
+          .replace(/[.;:]+$/, "")
+          .trim();
+        const found = candidate(
+          context,
+          page,
+          "lot_number",
+          value,
+          88,
+          "lot.explicit_owner_associated_lot",
+          block.start + lotMatch.index,
+          block.start + lotMatch.index + lotMatch[0].length,
+        );
+        if (found) candidates.push(found);
+      }
+
+      const tantiemesMatch =
+        /(?:vos\s+tanti[èe]mes|tanti[èe]mes(?:\s+(?:du|des)\s+lots?)?)\s*[:\-]?\s*([0-9][0-9\s.,/]{2,40})/i.exec(
+          block.text,
+        );
+
+      if (tantiemesMatch?.index !== undefined) {
+        const value = tantiemesMatch[1].replace(/\s+/g, "").replace(/[.;]+$/, "");
+        const found = candidate(
+          context,
+          page,
+          "lot_tantiemes",
+          value,
+          88,
+          "lot.explicit_owner_associated_tantiemes",
+          block.start + tantiemesMatch.index,
+          block.start + tantiemesMatch.index + tantiemesMatch[0].length,
+          (input) => input.replace(/\s+/g, ""),
+        );
+        if (found) candidates.push(found);
+      }
+
+      if (lotMatch || tantiemesMatch) {
+        return;
+      }
+    }
+  }
 }
 
 function addAgCandidates(
@@ -692,6 +804,7 @@ export function extractSimpleFields(context: SimpleExtractionContext) {
 
   addAgCandidates(candidates, context);
   addMandateCandidates(candidates, context);
+  addLotCandidates(candidates, context);
 
   const bestByField = new Map<
     SimpleFieldCandidate["fieldId"],

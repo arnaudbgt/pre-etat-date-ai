@@ -2,6 +2,8 @@ import "server-only";
 
 import { buildDocumentCoverageReport } from "@/lib/coverage/document-coverage";
 import type { MissingDocumentRecommendation } from "@/lib/coverage/document-coverage";
+import type { ProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
+import { getProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
 import { RESULT_SECTIONS, type ResultSection } from "@/lib/result/sections";
 import type { Database, Json } from "@/types/database.types";
 
@@ -30,6 +32,7 @@ export type ProjectResultField = {
 export type ProjectResultData = {
   coverage: MissingDocumentRecommendation[];
   fieldsById: Record<string, ProjectResultField>;
+  ownerContext: ProjectOwnerContext | null;
   report: {
     completion_rate: number;
     confidence_score: number;
@@ -73,7 +76,13 @@ export async function getProjectResultData(
   projectId: string,
 ): Promise<ProjectResultData> {
   const supabase = getSupabaseAdmin();
-  const [documentsResult, fieldsResult, sourcesResult, reportResult] =
+  const [
+    documentsResult,
+    fieldsResult,
+    sourcesResult,
+    reportResult,
+    ownerContext,
+  ] =
     await Promise.all([
       supabase
         .from("documents")
@@ -98,6 +107,7 @@ export async function getProjectResultData(
         .select("completion_rate, confidence_score, status")
         .eq("project_id", projectId)
         .maybeSingle(),
+      getProjectOwnerContext(projectId),
     ]);
 
   if (documentsResult.error) {
@@ -186,6 +196,7 @@ export async function getProjectResultData(
       })),
     }),
     fieldsById,
+    ownerContext,
     report: {
       completion_rate: reportResult.data?.completion_rate ?? 0,
       confidence_score: reportResult.data?.confidence_score ?? 0,

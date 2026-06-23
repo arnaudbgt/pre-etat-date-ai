@@ -57,6 +57,13 @@ function stableJson(value: unknown) {
   return JSON.stringify(value);
 }
 
+function normalizePvComparable(value: string) {
+  return normalizeComparable(value).replace(
+    /\b(?:[a-z]\s+){2,}[a-z]\b/g,
+    (match) => match.replace(/\s+/g, ""),
+  );
+}
+
 function candidate(
   context: SimpleExtractionContext,
   fieldId: ComplexFieldId,
@@ -80,7 +87,7 @@ function candidate(
 function pageBlocks(page: TextPage): TextBlock[] {
   const starts = new Set<number>([0]);
   const boundary =
-    /(?:^|\n)\s*(?=(?:r[ée]solution\s*(?:n[°o]|num[ée]ro)?\s*\d+|\d+\s*[.)-]\s+))/gim;
+    /(?:^|\n)\s*(?=(?:r[ée]solution\s*(?:n[°o]|num[ée]ro)?\s*\d+(?:\.\d+)*|\d+(?:\.\d+)*\s*[.)-]?\s+))/gim;
 
   for (const match of page.text.matchAll(boundary)) {
     if (match.index !== undefined) starts.add(match.index + match[0].length);
@@ -111,7 +118,7 @@ function agDate(context: SimpleExtractionContext) {
 
   for (const page of context.pages.slice(0, 3)) {
     const match =
-      /(?:proc[èe]s[\s-]*verbal[^\n]{0,80})?assembl[ée]e\s+g[ée]n[ée]rale[^\n]{0,120}/i.exec(
+      /(?:proc[èe]s[\s-]*verbal\s+de\s+l['’]?assembl[ée]e\s+g[ée]n[ée]rale|assembl[ée]e\s+g[ée]n[ée]rale)[\s\S]{0,260}/i.exec(
         page.text,
       );
     if (!match || match.index === undefined) continue;
@@ -133,11 +140,21 @@ function literalWorkTitle(block: string) {
     /r[ée]solution\s*(?:n[°o]|num[ée]ro)?\s*\d+\s*[:\-–—]\s*([^\n]{3,160})/i.exec(
       block,
     );
-  if (!resolution) return null;
+  if (resolution) {
+    const title = resolution[1].split(
+      /\s+(?=(?:date\s+du\s+vote|montant|co[uû]t|budget|travaux\s+(?:vot[ée]s|appel[ée]s)|appels?\s+de\s+fonds|r[ée]solution\s+adopt[ée]e))/i,
+    )[0];
+    return compactLiteral(title.replace(/[.:;\-–—]+$/, ""), 140) || null;
+  }
 
-  const title = resolution[1].split(
-    /\s+(?=(?:date\s+du\s+vote|montant|co[uû]t|budget|travaux\s+(?:vot[ée]s|appel[ée]s)|appels?\s+de\s+fonds|r[ée]solution\s+adopt[ée]e))/i,
+  const numbered =
+    /^\s*\d+(?:\.\d+)*\s*[.)-]?\s+([A-ZÀ-Ÿ0-9][^\n]{3,180})/m.exec(block);
+  if (!numbered) return null;
+
+  const title = numbered[1].split(
+    /\s+(?=(?:apr[èe]s\s+en\s+avoir|l['’]assembl[ée]e|montant|co[uû]t|budget|travaux\s+(?:vot[ée]s|appel[ée]s)|appels?\s+de\s+fonds|r[ée]solution\s+adopt[ée]e))/i,
   )[0];
+
   return compactLiteral(title.replace(/[.:;\-–—]+$/, ""), 140) || null;
 }
 
@@ -151,7 +168,11 @@ function explicitVoteDate(block: string, fallback?: string) {
 }
 
 function explicitAmountCents(block: string) {
-  if (!/(?:montant|co[uû]t|budget)\s*(?:total)?\s*[:\-]?/i.test(block)) {
+  if (
+    !/(?:montant|co[uû]t|budget|devis|march[ée]|travaux)\s*(?:total)?\s*[:\-]?/i.test(
+      block,
+    )
+  ) {
     return undefined;
   }
   const amounts = findMoneyAmounts(block);
@@ -175,7 +196,7 @@ function workDetection(
   fundingStatus: WorkItem["funding_status"],
   fallbackVoteDate?: string,
 ): WorkDetection | null {
-  const normalized = normalizeComparable(block.text);
+  const normalized = normalizePvComparable(block.text);
   const isVoted = /\b(vote|votes|adopte|adoptee|resolution adoptee)\b/.test(
     normalized,
   );
@@ -218,7 +239,7 @@ function addWorks(
   const fallbackVoteDate = agDate(context);
 
   for (const block of allBlocks(context)) {
-    const normalized = normalizeComparable(block.text);
+    const normalized = normalizePvComparable(block.text);
     let fieldId: ComplexFieldId | null = null;
     let fundingStatus: WorkItem["funding_status"] | null = null;
 
@@ -237,7 +258,7 @@ function addWorks(
       fieldId = "future_works_calls";
       fundingStatus = "future_calls";
     } else if (
-      /\b(appele et paye|appeles et payes|appele et regle|appeles et regles|integralement appele et paye|cloture et paye)\b/.test(
+      /\b(appele et paye|appeles et payes|appele et regle|appeles et regles|integralement appele et paye|cloture et paye|affectation (?:de )?(?:tout|partie|100)\b.*fonds travaux.*financement|mobiliser .*fonds travaux.*financement)\b/.test(
         normalized,
       )
     ) {
@@ -246,6 +267,12 @@ function addWorks(
     }
 
     if (!fieldId || !fundingStatus) continue;
+    const isWorkTitle =
+      /\b(travaux|ravalement|toiture|ascenseur|chauffage|chaufferie|isolation|assainissement|raccordement|reseau|facade|etancheite|porte|hall|fonds travaux)\b/.test(
+        normalized,
+      );
+    if (!isWorkTitle) continue;
+
     const detection = workDetection(block, fundingStatus, fallbackVoteDate);
     if (!detection) continue;
     const current = detections.get(fieldId) ?? [];
@@ -293,6 +320,7 @@ function addLegalProceedings(
   }
 
   for (const block of allBlocks(context)) {
+    const normalized = normalizePvComparable(block.text);
     const noProceeding =
       /\b(?:aucune|pas de)\s+(?:proc[ée]dure(?:\s+judiciaire)?|action\s+en\s+justice|contentieux)\s+(?:en\s+cours|engag[ée]e)?\b/i.exec(
         block.text,
@@ -317,11 +345,40 @@ function addLegalProceedings(
     }
 
     const sentences = block.text.split(/(?<=[.!?])\s+|\n+/);
-    const statement = sentences.find((sentence) =>
-      /\b(?:proc[ée]dure\s+judiciaire|assignation|action\s+en\s+justice|contentieux|instance\s+judiciaire)\b/i.test(
-        sentence,
-      ),
-    );
+    const statement = sentences.find((sentence) => {
+      const normalizedSentence = normalizePvComparable(sentence);
+      return (
+        /\b(?:procedure judiciaire|assignation|action en justice|contentieux|instance judiciaire|recouvrement judiciaire|litige)\b/.test(
+          normalizedSentence,
+        ) &&
+        !/\b(?:budget previsionnel|empruntaient)\b/.test(normalizedSentence)
+      );
+    });
+    if (
+      !statement &&
+      /\b(?:procedure judiciaire|assignation|action en justice|contentieux|instance judiciaire)\b/.test(
+        normalized,
+      )
+    ) {
+      const factualStatement = compactLiteral(block.text);
+      const value = stableJson([
+        {
+          factual_statement: factualStatement,
+          target: procedureTarget(factualStatement),
+        },
+      ]);
+      candidates.push(
+        candidate(
+          context,
+          "legal_proceedings_description",
+          value,
+          context.documentType === "fiche_synthetique" ? 92 : 88,
+          "complex.legal_proceedings.explicit_block_statement",
+          block,
+        ),
+      );
+      return;
+    }
     if (!statement) continue;
     const factualStatement = compactLiteral(statement);
     const value = stableJson([
@@ -361,26 +418,42 @@ function addControlledStatus(
 ) {
   if (!rule.relevantTypes.includes(context.documentType)) return;
 
+  let selected:
+    | {
+        block: TextBlock;
+        confidence: number;
+        priority: number;
+        ruleName: string;
+        value: string;
+      }
+    | null = null;
+
   for (const block of allBlocks(context)) {
     if (!rule.positive.test(block.text)) continue;
     let value: string | null = null;
     let ruleName = "";
+    let priority = 0;
 
     if (rule.absent.test(block.text)) {
       value = rule.fieldId === "collective_loan" ? "no" : "absent";
       ruleName = "explicit_absence";
+      priority = 3;
     } else if (rule.inProgress?.test(block.text)) {
       value = "in_progress";
       ruleName = "explicit_in_progress";
+      priority = 2;
     } else if (rule.completed?.test(block.text)) {
       value = rule.fieldId === "ppt_status" ? "adopted" : "completed";
       ruleName = "explicit_positive";
+      priority = 4;
     } else if (rule.unknown?.test(block.text)) {
       value = "unknown";
       ruleName = "explicit_unknown";
+      priority = 1;
     } else if (rule.fieldId === "collective_loan") {
       value = "yes";
       ruleName = "explicit_positive";
+      priority = 4;
     }
 
     if (!value) continue;
@@ -395,18 +468,23 @@ function addControlledStatus(
       (value === "adopted" || value === "yes" || value === "no");
     const confidence = directType || decisionInPv ? 95 : 82;
 
-    candidates.push(
-      candidate(
-        context,
-        rule.fieldId,
-        value,
-        confidence,
-        `complex.${rule.fieldId}.${ruleName}`,
-        block,
-      ),
-    );
-    return;
+    if (!selected || priority > selected.priority) {
+      selected = { block, confidence, priority, ruleName, value };
+    }
   }
+
+  if (!selected) return;
+
+  candidates.push(
+    candidate(
+      context,
+      rule.fieldId,
+      selected.value,
+      selected.confidence,
+      `complex.${rule.fieldId}.${selected.ruleName}`,
+      selected.block,
+    ),
+  );
 }
 
 function addStatuses(
@@ -427,10 +505,10 @@ function addStatuses(
     absent:
       /(?:aucun\s+(?:projet\s+de\s+)?plan\s+pluriannuel\s+de\s+travaux|absence\s+de\s+(?:PPPT|PPT)|(?:PPPT|PPT)\s+(?:absent|non\s+[ée]tabli|non\s+r[ée]alis[ée]))/i,
     completed:
-      /(?:(?:plan\s+pluriannuel\s+de\s+travaux|PPT)[^\n]{0,80}(?:adopt[ée]|approuv[ée])|(?:adoption|approbation)[^\n]{0,80}(?:du\s+)?(?:PPT|plan\s+pluriannuel\s+de\s+travaux))/i,
+      /(?:(?:plan\s+pluriannuel\s+de\s+travaux|PPT|PPPT)[^\n]{0,120}(?:adopt[ée]|approuv[ée])|(?:adoption|approbation)[^\n]{0,120}(?:du\s+)?(?:PPT|PPPT|plan\s+pluriannuel\s+de\s+travaux))/i,
     fieldId: "ppt_status",
     inProgress:
-      /(?:(?:PPPT|PPT|plan\s+pluriannuel\s+de\s+travaux)[^\n]{0,80}(?:en\s+cours|en\s+pr[ée]paration|en\s+[ée]laboration|command[ée])|[ée]laboration[^\n]{0,80}(?:du\s+)?(?:PPPT|PPT))/i,
+      /(?:(?:PPPT|PPT|plan\s+pluriannuel\s+de\s+travaux)[^\n]{0,120}(?:en\s+cours|en\s+pr[ée]paration|en\s+[ée]laboration|command[ée]|pr[ée]sentation\s+du\s+projet)|(?:pr[ée]sentation|[ée]laboration)[^\n]{0,120}(?:du\s+)?(?:PPPT|PPT|plan\s+pluriannuel\s+de\s+travaux))/i,
     positive: /(?:PPPT|PPT|plan\s+pluriannuel\s+de\s+travaux)/i,
     relevantTypes: ["pv_ag", "fiche_synthetique", "ppt"],
     unknown:

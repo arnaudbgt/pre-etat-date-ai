@@ -198,6 +198,56 @@ La résolution est adoptée à la majorité.`,
     expect(field(candidates, "budget_vote_date")?.value).toBe("2026-06-15");
   });
 
+  it("extracts a budget amount from a long numbered PV resolution block", () => {
+    const candidates = extract(
+      "pv_ag",
+      `PROCÈS-VERBAL DE L'ASSEMBLÉE GÉNÉRALE ORDINAIRE DU 12 décembre 2024
+7. APPROBATION DES COMPTES DE L'EXERCICE DU 01/07/2023 AU 30/06/2024
+Après délibération, cette résolution est adoptée.
+
+10. VOTE DU BUDGET PREVISIONNEL POUR L'EXERCICE DU 01/07/2025 AU 30/06/2026
+L'assemblée générale approuve le budget prévisionnel soumis au vote pour un montant de 145 000,00 €.
+La résolution est adoptée à la majorité.`,
+    );
+
+    expect(field(candidates, "annual_budget_amount")).toMatchObject({
+      matchedRule: "financial.pv_budget_resolution_amount",
+      value: 145000,
+    });
+    expect(field(candidates, "budget_vote_date")?.value).toBe("2024-12-12");
+  });
+
+  it("keeps a PV budget amount uncertain when several amounts are in the same resolution", () => {
+    const candidates = extract(
+      "pv_ag",
+      `Assemblée générale du 12/12/2024
+10. VOTE DU BUDGET PREVISIONNEL
+Le budget prévisionnel est adopté pour 145 000,00 €. Un sous-budget ascenseur de 8 000,00 € est mentionné.`,
+    );
+
+    expect(field(candidates, "annual_budget_amount")).toMatchObject({
+      confidence: 84,
+      matchedRule: "financial.pv_budget_resolution_ambiguous_amount",
+      value: 145000,
+    });
+  });
+
+  it("extracts the works-fund percentage from a PV resolution block", () => {
+    const candidates = extract(
+      "pv_ag",
+      `Assemblée générale du 12/12/2024
+13. DÉTERMINATION DU MONTANT DE LA COTISATION OBLIGATOIRE DU FONDS DE TRAVAUX
+L'assemblée fixe la cotisation obligatoire du fonds travaux à 5,00 % du budget prévisionnel.
+La résolution est adoptée.`,
+    );
+
+    const percentage = field(candidates, "works_fund_budget_percentage");
+    expect(percentage).toMatchObject({ value: 5 });
+    expect(percentage?.matchedRule).toMatch(
+      /^financial\.(works_fund_budget_percentage|pv_works_fund_percentage)$/,
+    );
+  });
+
   it("caps a monetary candidate shared by several fields as uncertain", () => {
     const candidates = extract(
       "appel_de_fonds",

@@ -7,6 +7,7 @@ import type {
 import type { Json } from "@/types/database.types";
 
 import { FieldManualActions } from "@/components/debug/field-manual-actions";
+import { OwnerContextSection } from "@/components/result/owner-context-section";
 
 function Badge({
   children,
@@ -152,6 +153,11 @@ export function ProjectResultView({
           </div>
         ))}
       </section>
+
+      <OwnerContextSection
+        ownerContext={data.ownerContext}
+        projectId={projectId}
+      />
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">

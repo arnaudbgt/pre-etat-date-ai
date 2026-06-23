@@ -55,6 +55,7 @@ describe("project result page", () => {
     );
 
     expect(source).toContain("buildDocumentCoverageReport");
+    expect(source).toContain("getProjectOwnerContext");
     expect(source).not.toContain("extractTextFromPdf");
     expect(source).not.toContain("classifyDocument");
     expect(source).not.toContain("extractSimpleFields");
@@ -74,10 +75,27 @@ describe("project result page", () => {
     );
 
     expect(source).toContain("Documents manquants ou recommandés");
+    expect(source).toContain("OwnerContextSection");
     expect(source).toContain("FieldManualActions");
     expect(source).toContain("field.existsInDatabase");
     expect(source).toContain("Champ non initialisé");
     expect(source).not.toContain("pdf");
     expect(source).not.toContain("stripe");
+  });
+
+  it("renders a minimal owner context section in the result page", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/result/owner-context-section.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("Propriétaire vendeur");
+    expect(source).toContain("Nom du propriétaire");
+    expect(source).toContain("Numéro de lot connu");
+    expect(source).toContain("/owner-context");
+    expect(source).toContain('method: "PUT"');
+    expect(source).not.toContain("seller_email");
+    expect(source).not.toContain("seller_first_name");
+    expect(source).not.toContain("tantiemes");
   });
 });
