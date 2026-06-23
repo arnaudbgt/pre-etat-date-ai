@@ -5,6 +5,7 @@ import type { Json } from "@/types/database.types";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 import {
+  COMPLEX_EXTRACTION_VERSION,
   EXTRACTION_FIELD_BY_ID,
   EXTRACTION_FIELD_DEFINITIONS,
   FINANCIAL_EXTRACTION_VERSION,
@@ -161,9 +162,11 @@ export async function persistDeterministicExtraction(input: PersistenceInput) {
         parsed.extractionVersion ??
         (row.matched_rule?.startsWith("financial.")
           ? FINANCIAL_EXTRACTION_VERSION
-          : row.matched_rule
-            ? SIMPLE_EXTRACTION_VERSION
-            : "unversioned"),
+          : row.matched_rule?.startsWith("complex.")
+            ? COMPLEX_EXTRACTION_VERSION
+            : row.matched_rule
+              ? SIMPLE_EXTRACTION_VERSION
+              : "unversioned"),
       matchedRule: row.matched_rule,
       normalizedValue: parsed.normalizedValue,
       page: row.source_page,

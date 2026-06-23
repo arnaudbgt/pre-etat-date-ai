@@ -8,6 +8,7 @@ import {
   type TextPage,
 } from "@/lib/classification/types";
 import { extractSimpleFields } from "@/lib/extraction/simple/extractor";
+import { extractComplexFields } from "@/lib/extraction/simple/complex-extractor";
 import { extractFinancialFields } from "@/lib/extraction/simple/financial-extractor";
 import { persistDeterministicExtraction } from "@/lib/extraction/simple/persistence";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -291,6 +292,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const candidates = [
       ...extractSimpleFields(extractionContext),
       ...extractFinancialFields(extractionContext),
+      ...extractComplexFields(extractionContext),
     ];
     await persistDeterministicExtraction({
       candidates,

@@ -1,0 +1,301 @@
+import { describe, expect, it } from "vitest";
+
+import { extractComplexFields } from "../../src/lib/extraction/simple/complex-extractor";
+import {
+  canUpdateCanonicalField,
+  mergeSimpleFieldSources,
+} from "../../src/lib/extraction/simple/merge";
+import type {
+  SimpleExtractionContext,
+  StoredSourceCandidate,
+} from "../../src/lib/extraction/simple/types";
+
+function extract(
+  documentType: SimpleExtractionContext["documentType"],
+  text: string,
+  classificationStatus: SimpleExtractionContext["classificationStatus"] = "classified",
+) {
+  return extractComplexFields({
+    classificationStatus,
+    documentType,
+    pages: [{ pageNumber: 1, text }],
+  });
+}
+
+function field(
+  candidates: ReturnType<typeof extractComplexFields>,
+  fieldId: string,
+) {
+  return candidates.find((candidate) => candidate.fieldId === fieldId);
+}
+
+function parsedValue<T>(
+  candidates: ReturnType<typeof extractComplexFields>,
+  fieldId: string,
+) {
+  const value = field(candidates, fieldId)?.value;
+  return typeof value === "string" ? (JSON.parse(value) as T) : undefined;
+}
+
+function complexSource(
+  documentId: string,
+  value: string,
+  confidence: number,
+): StoredSourceCandidate {
+  return {
+    confidence,
+    documentId,
+    excerpt: value,
+    extractionVersion: "complex-rules-v1",
+    matchedRule: "complex.test",
+    normalizedValue: value,
+    page: 1,
+    value,
+  };
+}
+
+describe("deterministic complex extraction", () => {
+  it("extracts voted and paid works with an explicit amount", () => {
+    const candidates = extract(
+      "pv_ag",
+      `PROCÈS-VERBAL DE L'ASSEMBLÉE GÉNÉRALE DU 12/03/2026
+Résolution n° 5 — Réfection de la toiture
+Travaux votés, appelés et payés. Montant : 12 500,00 €`,
+    );
+    const works = parsedValue<
+      Array<{
+        amount_cents?: number;
+        funding_status: string;
+        title: string;
+        vote_date?: string;
+      }>
+    >(candidates, "voted_paid_works");
+
+    expect(works).toEqual([
+      {
+        amount_cents: 1250000,
+        funding_status: "called_and_paid",
+        title: "Réfection de la toiture",
+        vote_date: "2026-03-12",
+      },
+    ]);
+  });
+
+  it("extracts voted works without inventing a missing amount", () => {
+    const candidates = extract(
+      "pv_ag",
+      `Assemblée générale du 12/03/2026
+Résolution n° 6 — Remplacement de la porte du hall
+Travaux votés, appelés et réglés.`,
+    );
+    const works = parsedValue<Array<Record<string, unknown>>>(
+      candidates,
+      "voted_paid_works",
+    );
+
+    expect(works?.[0]).not.toHaveProperty("amount_cents");
+    expect(works?.[0]).toMatchObject({
+      title: "Remplacement de la porte du hall",
+    });
+  });
+
+  it("extracts explicit future works calls and their dates", () => {
+    const works = parsedValue<Array<Record<string, unknown>>>(
+      extract(
+        "pv_ag",
+        `Assemblée générale du 12/03/2026
+Résolution n° 7 — Ravalement de la façade
+Travaux votés. Futurs appels de fonds les 01/09/2026 et 01/12/2026.`,
+      ),
+      "future_works_calls",
+    );
+
+    expect(works?.[0]).toMatchObject({
+      call_dates: ["2026-09-01", "2026-12-01"],
+      funding_status: "future_calls",
+      title: "Ravalement de la façade",
+    });
+  });
+
+  it("extracts works explicitly voted but not yet called", () => {
+    const works = parsedValue<Array<Record<string, unknown>>>(
+      extract(
+        "annexe_comptable",
+        `Résolution n° 8 — Réfection de l'ascenseur
+Travaux votés non encore appelés.`,
+      ),
+      "voted_not_called_works",
+    );
+
+    expect(works?.[0]).toMatchObject({
+      funding_status: "not_called",
+      title: "Réfection de l'ascenseur",
+    });
+  });
+
+  it("keeps only the document's factual statement for legal proceedings", () => {
+    const procedures = parsedValue<
+      Array<{ factual_statement: string; target: string }>
+    >(
+      extract(
+        "fiche_synthetique",
+        "Une procédure judiciaire en recouvrement est engagée contre trois copropriétaires.",
+      ),
+      "legal_proceedings_description",
+    );
+
+    expect(procedures).toEqual([
+      {
+        factual_statement:
+          "Une procédure judiciaire en recouvrement est engagée contre trois copropriétaires.",
+        target: "coproprietaire",
+      },
+    ]);
+  });
+
+  it("records an explicit absence of legal proceedings", () => {
+    const procedures = parsedValue<unknown[]>(
+      extract("fiche_synthetique", "Aucune procédure judiciaire en cours."),
+      "legal_proceedings_description",
+    );
+
+    expect(procedures).toEqual([]);
+  });
+
+  it.each([
+    ["Un emprunt collectif a été souscrit et reste en cours.", "yes"],
+    ["Aucun emprunt collectif en cours.", "no"],
+  ])("extracts collective-loan status from %s", (text, expected) => {
+    expect(field(extract("pv_ag", text), "collective_loan")?.value).toBe(
+      expected,
+    );
+  });
+
+  it("extracts an adopted PPT", () => {
+    expect(
+      field(
+        extract(
+          "pv_ag",
+          "Le plan pluriannuel de travaux est adopté par l'assemblée générale.",
+        ),
+        "ppt_status",
+      )?.value,
+    ).toBe("adopted");
+  });
+
+  it("extracts a completed DTG", () => {
+    expect(
+      field(
+        extract("dtg", "Diagnostic technique global réalisé — rapport final."),
+        "dtg_status",
+      )?.value,
+    ).toBe("completed");
+  });
+
+  it("extracts a completed collective DPE", () => {
+    expect(
+      field(
+        extract(
+          "dpe_collectif",
+          "DPE collectif réalisé pour l'ensemble de l'immeuble.",
+        ),
+        "collective_dpe_status",
+      )?.value,
+    ).toBe("completed");
+  });
+
+  it.each([
+    [
+      "ppt",
+      "Aucun plan pluriannuel de travaux n'est établi.",
+      "ppt_status",
+      "absent",
+    ],
+    ["dtg", "Le DTG est en cours de réalisation.", "dtg_status", "in_progress"],
+    [
+      "dpe_collectif",
+      "Absence de DPE collectif.",
+      "collective_dpe_status",
+      "absent",
+    ],
+  ] as const)(
+    "extracts an explicit controlled status from a %s document",
+    (documentType, text, fieldId, expected) => {
+      expect(field(extract(documentType, text), fieldId)?.value).toBe(expected);
+    },
+  );
+
+  it("returns no status candidate when the document is silent", () => {
+    expect(
+      field(
+        extract("fiche_synthetique", "Nombre total de lots : 28."),
+        "dtg_status",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("distinguishes an explicit unknown status from documentary silence", () => {
+    expect(
+      field(
+        extract("fiche_synthetique", "Statut du DTG : non renseigné."),
+        "dtg_status",
+      )?.value,
+    ).toBe("unknown");
+  });
+
+  it("caps candidates from an ambiguously classified document", () => {
+    const candidates = extract(
+      "ppt",
+      "Le plan pluriannuel de travaux est en cours d'élaboration.",
+      "uncertain",
+    );
+
+    expect(field(candidates, "ppt_status")?.confidence).toBeLessThanOrEqual(84);
+  });
+
+  it("does not associate an amount from a separate block with works", () => {
+    const works = parsedValue<Array<Record<string, unknown>>>(
+      extract(
+        "pv_ag",
+        `Assemblée générale du 12/03/2026
+Résolution n° 9 — Isolation de la toiture
+Travaux votés, appelés et payés.
+Résolution n° 10 — Budget prévisionnel
+Montant : 40 000,00 €`,
+      ),
+      "voted_paid_works",
+    );
+
+    expect(works?.[0]).not.toHaveProperty("amount_cents");
+  });
+
+  it("never exposes the complete source text in persistable candidates", () => {
+    const marker = "COMPLETE_COMPLEX_TEXT_MUST_NOT_PERSIST";
+    const text = `DPE collectif réalisé. ${"x".repeat(500)} ${marker}`;
+    const candidates = extract("dpe_collectif", text);
+    const serialized = JSON.stringify(candidates);
+
+    expect(serialized).not.toContain(marker);
+    expect(serialized).not.toContain(text);
+    expect(candidates.every((item) => item.excerpt.length <= 200)).toBe(true);
+  });
+});
+
+describe("complex merge and manual protection", () => {
+  it("marks contradictory documents uncertain and keeps the best source", () => {
+    const result = mergeSimpleFieldSources([
+      complexSource("doc-a", "adopted", 95),
+      complexSource("doc-b", "absent", 92),
+    ]);
+
+    expect(result).toMatchObject({
+      sourceDocumentId: "doc-a",
+      status: "uncertain",
+      value: "adopted",
+    });
+  });
+
+  it("protects manually edited fields", () => {
+    expect(canUpdateCanonicalField(true)).toBe(false);
+  });
+});

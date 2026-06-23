@@ -1,5 +1,6 @@
 export const SIMPLE_EXTRACTION_VERSION = "simple-rules-v1";
 export const FINANCIAL_EXTRACTION_VERSION = "financial-rules-v1";
+export const COMPLEX_EXTRACTION_VERSION = "complex-rules-v1";
 
 export const SIMPLE_FIELD_DEFINITIONS = [
   {
@@ -157,15 +158,69 @@ export const FINANCIAL_FIELD_DEFINITIONS = [
   },
 ] as const;
 
+export const COMPLEX_FIELD_DEFINITIONS = [
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "voted_paid_works",
+    label: "Travaux votés et payés",
+    section: "travaux_votes",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "future_works_calls",
+    label: "Appels de fonds travaux futurs",
+    section: "travaux_votes",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "voted_not_called_works",
+    label: "Travaux votés non encore appelés",
+    section: "travaux_votes",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "legal_proceedings_description",
+    label: "Procédures concernant la copropriété",
+    section: "procedures",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "collective_loan",
+    label: "Emprunt collectif en cours",
+    section: "procedures",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "ppt_status",
+    label: "Statut du plan pluriannuel de travaux",
+    section: "informations_complementaires",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "collective_dpe_status",
+    label: "Statut du DPE collectif",
+    section: "informations_complementaires",
+  },
+  {
+    extractionVersion: COMPLEX_EXTRACTION_VERSION,
+    fieldId: "dtg_status",
+    label: "Statut du diagnostic technique global",
+    section: "informations_complementaires",
+  },
+] as const;
+
 export const EXTRACTION_FIELD_DEFINITIONS = [
   ...SIMPLE_FIELD_DEFINITIONS,
   ...FINANCIAL_FIELD_DEFINITIONS,
+  ...COMPLEX_FIELD_DEFINITIONS,
 ] as const;
 
 export type SimpleFieldId =
   (typeof SIMPLE_FIELD_DEFINITIONS)[number]["fieldId"];
 export type FinancialFieldId =
   (typeof FINANCIAL_FIELD_DEFINITIONS)[number]["fieldId"];
+export type ComplexFieldId =
+  (typeof COMPLEX_FIELD_DEFINITIONS)[number]["fieldId"];
 export type ExtractionFieldId =
   (typeof EXTRACTION_FIELD_DEFINITIONS)[number]["fieldId"];
 
