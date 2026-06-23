@@ -61,6 +61,14 @@ npm run lint
 npm run build
 ```
 
+Si le sprint touche à la classification, extraction ou cohérence, et que des PDF réels locaux sont disponibles :
+
+```bash
+npm run test:real-world
+```
+
+Les PDF et scénarios réels restent dans `test-data/real-world/` et ne doivent pas être commités. Seul `scenarios.example.json` est versionné.
+
 ## Règle de documentation
 
 Si une information importante n’existe que dans une conversation, elle n’est pas encore fiable. Elle doit être reportée dans le dépôt.

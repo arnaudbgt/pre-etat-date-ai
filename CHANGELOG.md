@@ -6,6 +6,81 @@ Toutes les évolutions notables du projet sont documentées ici.
 
 - Documentation projet persistante : statut, architecture, modèle de données, catalogue d’extraction, décisions et workflow développeur.
 
+## Sprint 5.6
+
+Date : 2026-06-23
+
+Fonctionnalités :
+
+- Rapport de couverture documentaire dans `/analyse/debug/[projectId]`.
+- Section `Documents manquants ou recommandés`.
+- Recommandation par champ `missing` : document prioritaire, alternatives, raison.
+- Distinction entre document prioritaire absent et document présent mais champ non extrait.
+- Logique pure `src/lib/coverage/document-coverage.ts`.
+
+Tests :
+
+- Recommandations pour budget annuel, solde vendeur, fonds travaux, DPE collectif, DTG et PPT.
+- Filtrage limité aux champs `missing`.
+- Détection d’un document prioritaire déjà présent.
+- Prise en compte de `document_type_override`.
+- Fallback stable pour champ non mappé.
+
+Migrations :
+
+- Aucune.
+
+## Sprint 5.5
+
+Date : 2026-06-23
+
+Fonctionnalités :
+
+- Runner local `npm run test:real-world`.
+- Scénarios de tests réels locaux dans `test-data/real-world/scenarios.json`.
+- Exemple versionné `test-data/real-world/scenarios.example.json`.
+- Upload des PDF dans Supabase Storage local.
+- Exécution du pipeline classification, extraction et cohérence.
+- Comparaison des classifications et champs attendus.
+- Génération de rapports JSON et Markdown dans `test-results/`.
+
+Tests :
+
+- Vérification de la commande npm.
+- Vérification des règles `.gitignore`.
+- Vérification du format de scénario exemple.
+- Vérification que le script ne loggue pas le texte PDF complet.
+
+Migrations :
+
+- Aucune.
+
+## Sprint 5.4
+
+Date : 2026-06-23
+
+Fonctionnalités :
+
+- Diagnostic avancé par champ dans la vue debug.
+- Ajout de `candidate_count`, `best_candidate_confidence`, `best_candidate_rule`, `failure_stage`, `rejection_reason`.
+- Raisons courtes et déterministes pour les champs `missing`, `uncertain` et `inconsistent`.
+- Détection diagnostique des champs non implémentés, documents non pertinents, libellés/montants/dates absents, normalisation impossible, candidats sous seuil, merge rejeté et protection manuelle.
+
+Tests :
+
+- Diagnostic `manual_protected`.
+- Diagnostic `not_implemented`.
+- Diagnostic `document_type_gate`.
+- Diagnostics `label_not_found`, `amount_not_found`, `date_not_found`.
+- Diagnostic `normalization_failed`.
+- Diagnostic `candidate_below_threshold`.
+- Diagnostic `merge_rejected`.
+- Affichage de `best_candidate_rule` dans la vue debug.
+
+Migrations :
+
+- Aucune.
+
 ## Sprint 5.3
 
 Date : 2026-06-23

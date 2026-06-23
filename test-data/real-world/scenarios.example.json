@@ -1,0 +1,17 @@
+[
+  {
+    "name": "foncia-001",
+    "files": ["Appel de charges 2025 - Février.pdf", "PV.AGS.14.04.2023.pdf"],
+    "expected": {
+      "documents": {
+        "Appel de charges 2025 - Février.pdf": "appel_de_fonds",
+        "PV.AGS.14.04.2023.pdf": "pv_ag"
+      },
+      "fields": {
+        "syndic_name": "Foncia Nancy - Tour Thiers",
+        "syndic_manager": "Gaelle ARNOULD",
+        "property_address": "LA PLEIADE"
+      }
+    }
+  }
+]

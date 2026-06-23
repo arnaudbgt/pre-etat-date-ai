@@ -12,6 +12,7 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local --schema public > src/types/database.types.ts",
     "test": "vitest run",
+    "test:real-world": "tsx --conditions react-server scripts/run-real-world-tests.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
@@ -41,6 +42,7 @@
     "prettier-plugin-tailwindcss": "^0.6.0",
     "supabase": "2.107.0",
     "tailwindcss": "^4.1.0",
+    "tsx": "^4.22.4",
     "tw-animate-css": "^1.3.0",
     "typescript": "^5.8.0",
     "vitest": "4.1.9"

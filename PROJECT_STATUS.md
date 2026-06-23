@@ -109,6 +109,39 @@ Validation et correction manuelle des champs extraits.
 - Les sources automatiques restent conservées.
 - Après correction/validation, seule la cohérence Sprint 5 est relancée.
 
+### Sprint 5.4
+
+Diagnostic avancé des champs manquants, douteux ou incohérents.
+
+- Ajout d’un diagnostic déterministe par champ dans `/analyse/debug/[projectId]`.
+- Colonnes exposées : `candidate_count`, `best_candidate_confidence`, `best_candidate_rule`, `failure_stage`, `rejection_reason`.
+- Étapes de diagnostic : `document_type_gate`, `label_not_found`, `amount_not_found`, `date_not_found`, `normalization_failed`, `candidate_below_threshold`, `merge_rejected`, `manual_protected`, `not_implemented`.
+- Aucun changement des règles métier, extracteurs, seuils, PDF, Storage ou données persistées métier.
+
+### Sprint 5.5
+
+Tests automatiques de dossiers réels locaux.
+
+- Ajout d’un runner local `npm run test:real-world`.
+- Scénarios locaux dans `test-data/real-world/scenarios.json`, ignoré par Git.
+- Exemple versionné : `test-data/real-world/scenarios.example.json`.
+- PDF réels locaux ignorés par Git.
+- Rapports générés dans `test-results/real-world-report.json` et `test-results/real-world-report.md`, ignorés par Git.
+- Le script crée un projet de test, insère les PDF dans Supabase Storage local, lance classification/extraction/cohérence, puis compare les résultats attendus.
+- Aucun OCR, aucune IA, aucune modification des règles métier.
+
+### Sprint 5.6
+
+Rapport de couverture documentaire.
+
+- Ajout d’une section debug `Documents manquants ou recommandés`.
+- Liste uniquement les champs `missing`.
+- Indique le document prioritaire attendu, les alternatives possibles et une raison courte.
+- Signale si le document prioritaire est déjà présent : cela indique plutôt une règle manquante ou insuffisante.
+- Signale si le document prioritaire est absent : cela indique un document probablement manquant.
+- Logique pure dans `src/lib/coverage/document-coverage.ts`.
+- Aucune migration, aucune relecture PDF, aucune relance extraction/classification/cohérence.
+
 ## Fonctionnalités disponibles
 
 - Création de projet anonyme.
@@ -124,6 +157,9 @@ Validation et correction manuelle des champs extraits.
 - Page debug projet.
 - Override manuel du type documentaire.
 - Correction ou validation manuelle des champs.
+- Diagnostic avancé des champs `missing`, `uncertain` et `inconsistent`.
+- Runner local de tests automatiques sur dossiers PDF réels non commités.
+- Rapport debug de couverture documentaire pour les champs manquants.
 
 ## Fonctionnalités prévues
 
@@ -183,6 +219,13 @@ npm run db:status
 npm run db:reset
 npm run db:types
 npm run db:stop
+```
+
+Tests dossiers réels locaux :
+
+```bash
+cp test-data/real-world/scenarios.example.json test-data/real-world/scenarios.json
+npm run test:real-world
 ```
 
 ## Structure du projet

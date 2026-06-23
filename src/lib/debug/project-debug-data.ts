@@ -1,14 +1,11 @@
 import "server-only";
 
-import type { ClassificationStatus } from "@/lib/classification/types";
 import type { Json } from "@/types/database.types";
 
-import { getClassificationLimits } from "@/lib/classification/config";
+import { buildDocumentCoverageReport } from "@/lib/coverage/document-coverage";
+import { buildFieldDebugDiagnostic } from "@/lib/debug/field-diagnostics";
 import { getEffectiveDocumentType } from "@/lib/documents/document-types";
-import { analyzeSyndicEmailCandidates } from "@/lib/extraction/simple/extractor";
-import { extractTextFromPdfBuffer } from "@/lib/pdf/extract-text-server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { SOURCE_DOCUMENTS_BUCKET } from "@/lib/upload/constants";
 
 type ClassificationDetails = {
   candidates?: Array<{ score?: number; type?: string }>;
@@ -58,14 +55,6 @@ function parseClassificationDetails(value: Json | null): ClassificationDetails {
   };
 }
 
-function extractionClassificationStatus(status: string): ClassificationStatus {
-  return status === "classified" ||
-    status === "uncertain" ||
-    status === "insufficient_text"
-    ? status
-    : "uncertain";
-}
-
 export async function getProjectDebugData(projectId: string) {
   const supabase = getSupabaseAdmin();
   const [documentsResult, fieldsResult, sourcesResult, reportResult] =
@@ -89,7 +78,7 @@ export async function getProjectDebugData(projectId: string) {
       supabase
         .from("extracted_field_sources")
         .select(
-          "confidence, document_id, extracted_field_id, matched_rule, source_excerpt, source_locator, source_page",
+          "confidence, document_id, extracted_field_id, matched_rule, source_excerpt, source_locator, source_page, source_value",
         )
         .order("created_at", { ascending: true }),
       supabase
@@ -122,19 +111,6 @@ export async function getProjectDebugData(projectId: string) {
   const documentsById = new Map(
     documentsResult.data.map((document) => [document.id, document]),
   );
-  const emailDebugByFieldId = new Map<
-    string,
-    {
-      candidate_count: number;
-      rejected_candidates: Array<{
-        document: string;
-        page: number;
-        reason: string | null;
-        value: string;
-      }>;
-      selected_candidate: string | null;
-    }
-  >();
   const sourcesByFieldId = new Map<string, typeof sourcesResult.data>();
 
   for (const source of sourcesResult.data) {
@@ -154,88 +130,11 @@ export async function getProjectDebugData(projectId: string) {
       uncertain: 0,
     },
   );
-  const syndicEmailField = fieldsResult.data.find(
-    (field) => field.field_id === "syndic_email",
-  );
-
-  if (syndicEmailField) {
-    const rejectedCandidates: Array<{
-      document: string;
-      page: number;
-      reason: string | null;
-      value: string;
-    }> = [];
-    let selectedCandidate: string | null = null;
-    let candidateCount = 0;
-    const limits = getClassificationLimits();
-
-    for (const document of documentsResult.data) {
-      const effectiveDocumentType = getEffectiveDocumentType(document);
-
-      if (!document.storage_path) {
-        continue;
-      }
-
-      try {
-        const { data: pdfBlob, error: downloadError } = await supabase.storage
-          .from(SOURCE_DOCUMENTS_BUCKET)
-          .download(document.storage_path);
-
-        if (downloadError || !pdfBlob) {
-          continue;
-        }
-
-        const extractedText = await extractTextFromPdfBuffer(
-          Buffer.from(await pdfBlob.arrayBuffer()),
-          {
-            maxCharacters: limits.maxCharacters,
-            maxPages: limits.maxPages,
-          },
-          {
-            documentId: document.id,
-            storagePath: document.storage_path,
-          },
-        );
-        const diagnostics = analyzeSyndicEmailCandidates({
-          classificationStatus: extractionClassificationStatus(
-            document.classification_status,
-          ),
-          documentType: effectiveDocumentType,
-          pages: extractedText.pages,
-        });
-
-        candidateCount += diagnostics.candidates.length;
-
-        if (!selectedCandidate && diagnostics.selectedCandidate) {
-          selectedCandidate = diagnostics.selectedCandidate.value;
-        }
-
-        rejectedCandidates.push(
-          ...diagnostics.rejectedCandidates.map((candidate) => ({
-            document: document.filename,
-            page: candidate.page,
-            reason: candidate.rejectionReason,
-            value: candidate.value,
-          })),
-        );
-      } catch (error) {
-        if (process.env.NODE_ENV === "development") {
-          console.error("debug_syndic_email_candidates_failed", {
-            documentId: document.id,
-            errorName: error instanceof Error ? error.name : "UnknownError",
-          });
-        }
-      }
-    }
-
-    emailDebugByFieldId.set(syndicEmailField.id, {
-      candidate_count: candidateCount,
-      rejected_candidates: rejectedCandidates,
-      selected_candidate: selectedCandidate,
-    });
-  }
-
   return {
+    coverage: buildDocumentCoverageReport({
+      documents: documentsResult.data,
+      fields: fieldsResult.data,
+    }),
     documents: documentsResult.data.map((document) => {
       const parsedDetails = parseClassificationDetails(
         document.classification_details,
@@ -254,40 +153,16 @@ export async function getProjectDebugData(projectId: string) {
     }),
     fields: fieldsResult.data.map((field) => {
       const sources = sourcesByFieldId.get(field.id) ?? [];
-      const bestConfidence = sources.reduce(
-        (best, source) => Math.max(best, source.confidence ?? 0),
-        0,
-      );
-      const failureStage =
-        field.manually_edited
-          ? "manual_protected"
-          : field.status !== "missing"
-            ? "accepted"
-            : sources.length > 0
-              ? "merge"
-              : "candidate_generation";
-      const rejectionReason =
-        field.manually_edited
-          ? "Champ modifié manuellement : diagnostic automatique ignoré."
-          : field.status !== "missing"
-            ? "Au moins un candidat a été retenu."
-            : sources.length > 0
-              ? "Des sources existent mais le merge/cohérence n’a pas retenu de valeur canonique."
-              : "Aucun candidat déterministe n’a été produit par les règles actuelles.";
+      const diagnostic = buildFieldDebugDiagnostic({
+        documents: documentsResult.data,
+        field,
+        sources,
+      });
 
       return {
         ...field,
         debug_diagnostic: {
-          best_candidate_confidence: bestConfidence || null,
-          candidate_count:
-            emailDebugByFieldId.get(field.id)?.candidate_count ??
-            sources.length,
-          failure_stage: failureStage,
-          rejection_reason: rejectionReason,
-          rejected_candidates:
-            emailDebugByFieldId.get(field.id)?.rejected_candidates ?? [],
-          selected_candidate:
-            emailDebugByFieldId.get(field.id)?.selected_candidate ?? null,
+          ...diagnostic,
         },
       };
     }),

@@ -53,7 +53,22 @@ describe("document type manual override", () => {
     expect(source).toContain("pdf_has_text_layer");
     expect(source).toContain("totalPages");
     expect(source).toContain("extractedCharacters");
+    expect(source).toContain("best_candidate_rule");
     expect(source).toContain("Completion");
+  });
+
+  it("keeps the debug page read-only and avoids PDF re-extraction during render", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/lib/debug/project-debug-data.ts"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("extractTextFromPdfBuffer");
+    expect(source).not.toContain("extractTextFromPdfServer");
+    expect(source).not.toContain("SOURCE_DOCUMENTS_BUCKET");
+    expect(source).not.toContain(".storage");
+    expect(source).not.toContain(".download(");
+    expect(source).not.toContain("analyzeSyndicEmailCandidates");
   });
 
   it("reprocesses only the overridden document and then relaunches project consistency", () => {

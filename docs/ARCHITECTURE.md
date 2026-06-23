@@ -169,11 +169,37 @@ Elle affiche :
 - type automatique et type effectif ;
 - métriques PDF ;
 - champs extraits ;
-- diagnostics de candidats ;
+- diagnostics avancés de candidats et d’échec par champ ;
 - sources ;
 - scores du rapport.
 
 Cette page est une interface d’audit et de développement. Elle prépare la future interface métier.
+
+### Diagnostic avancé des champs
+
+Le diagnostic Sprint 5.4 est calculé dans `src/lib/debug/field-diagnostics.ts`.
+
+Il n’écrit aucune donnée et ne modifie ni les extracteurs, ni les seuils, ni les règles métier. Il dérive les informations depuis les documents, champs et sources déjà chargés.
+
+Colonnes exposées :
+
+- `candidate_count`
+- `best_candidate_confidence`
+- `best_candidate_rule`
+- `failure_stage`
+- `rejection_reason`
+
+Les étapes possibles de `failure_stage` sont :
+
+- `document_type_gate`
+- `label_not_found`
+- `amount_not_found`
+- `date_not_found`
+- `normalization_failed`
+- `candidate_below_threshold`
+- `merge_rejected`
+- `manual_protected`
+- `not_implemented`
 
 ## Overrides documentaires
 
@@ -204,3 +230,38 @@ Effets :
 - relance uniquement la cohérence Sprint 5.
 
 Les sources existantes ne sont ni modifiées, ni supprimées.
+
+## Tests automatiques de dossiers réels
+
+Le Sprint 5.5 ajoute un runner local :
+
+```bash
+npm run test:real-world
+```
+
+Le script `scripts/run-real-world-tests.ts` lit `test-data/real-world/scenarios.json`, charge les PDF locaux ignorés par Git dans Supabase Storage local, lance le pipeline existant classification/extraction/cohérence, puis compare les résultats aux attentes du scénario.
+
+Rapports générés :
+
+- `test-results/real-world-report.json`
+- `test-results/real-world-report.md`
+
+Le script ne doit jamais afficher le texte complet extrait et ne doit pas être utilisé comme test CI avec des PDF réels commités.
+
+## Couverture documentaire
+
+Le Sprint 5.6 ajoute une lecture de couverture dans la page debug.
+
+Module :
+
+- `src/lib/coverage/document-coverage.ts`
+
+La fonction pure prend les documents et champs déjà chargés depuis PostgreSQL, puis produit une recommandation pour chaque champ `missing` :
+
+- document prioritaire attendu ;
+- documents alternatifs possibles ;
+- raison courte ;
+- statut `document_probably_missing` si le document prioritaire est absent ;
+- statut `document_present_rule_missing` si le document prioritaire est déjà présent.
+
+Cette couche ne lit aucun PDF, ne relance aucune extraction et ne modifie aucune donnée.

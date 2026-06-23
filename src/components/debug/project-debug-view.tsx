@@ -6,6 +6,88 @@ import type { ProjectDebugData } from "@/lib/debug/project-debug-data";
 import { DocumentTypeOverride } from "./document-type-override";
 import { FieldManualActions } from "./field-manual-actions";
 
+const MAX_JSON_DEPTH = 4;
+const MAX_JSON_ARRAY_ITEMS = 20;
+const MAX_JSON_OBJECT_KEYS = 30;
+const MAX_STRING_LENGTH = 500;
+const MAX_JSON_OUTPUT_LENGTH = 8_000;
+
+function truncateText(value: string, maxLength = MAX_STRING_LENGTH) {
+  return value.length > maxLength
+    ? `${value.slice(0, maxLength)}… [tronqué ${value.length - maxLength} caractères]`
+    : value;
+}
+
+function sanitizeJsonValue(
+  value: unknown,
+  depth = 0,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return truncateText(value);
+  }
+
+  if (typeof value !== "object") {
+    return String(value);
+  }
+
+  if (seen.has(value)) {
+    return "[référence circulaire]";
+  }
+
+  if (depth >= MAX_JSON_DEPTH) {
+    return Array.isArray(value) ? "[tableau tronqué]" : "[objet tronqué]";
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, MAX_JSON_ARRAY_ITEMS)
+      .map((item) => sanitizeJsonValue(item, depth + 1, seen));
+
+    if (value.length > MAX_JSON_ARRAY_ITEMS) {
+      items.push(`[${value.length - MAX_JSON_ARRAY_ITEMS} éléments tronqués]`);
+    }
+
+    return items;
+  }
+
+  const entries = Object.entries(value).slice(0, MAX_JSON_OBJECT_KEYS);
+  const result: Record<string, unknown> = {};
+
+  for (const [key, entryValue] of entries) {
+    result[key] = sanitizeJsonValue(entryValue, depth + 1, seen);
+  }
+
+  const extraKeys = Object.keys(value).length - entries.length;
+
+  if (extraKeys > 0) {
+    result.__truncated_keys = `${extraKeys} clés tronquées`;
+  }
+
+  return result;
+}
+
+function safeJsonStringify(value: Json | null) {
+  try {
+    const json = JSON.stringify(sanitizeJsonValue(value), null, 2);
+    return json.length > MAX_JSON_OUTPUT_LENGTH
+      ? `${json.slice(0, MAX_JSON_OUTPUT_LENGTH)}\n… [JSON tronqué]`
+      : json;
+  } catch {
+    return "[JSON non affichable]";
+  }
+}
+
 function JsonBlock({ value }: { value: Json | null }) {
   if (value === null) {
     return <span className="text-neutral-400">—</span>;
@@ -13,7 +95,7 @@ function JsonBlock({ value }: { value: Json | null }) {
 
   return (
     <pre className="max-h-56 overflow-auto rounded-lg bg-neutral-950 p-3 text-xs text-neutral-50">
-      {JSON.stringify(value, null, 2)}
+      {safeJsonStringify(value)}
     </pre>
   );
 }
@@ -76,6 +158,65 @@ export function ProjectDebugView({
             <p className="mt-2 text-2xl font-semibold">{value}</p>
           </div>
         ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">
+          Documents manquants ou recommandés
+        </h2>
+        <p className="text-sm text-neutral-600">
+          Lecture indicative des champs manquants : si le document prioritaire
+          est déjà présent, le problème vient probablement d’une règle
+          d’extraction insuffisante plutôt que d’une pièce absente.
+        </p>
+        <div className="overflow-x-auto rounded-xl border border-neutral-200">
+          <table className="min-w-full border-collapse">
+            <thead className="bg-neutral-50 text-left text-xs text-neutral-500 uppercase">
+              <tr>
+                <th className="px-3 py-2">field_id</th>
+                <th className="px-3 py-2">Document prioritaire attendu</th>
+                <th className="px-3 py-2">Alternatives possibles</th>
+                <th className="px-3 py-2">Diagnostic</th>
+                <th className="px-3 py-2">Raison</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.coverage.length > 0 ? (
+                data.coverage.map((item) => (
+                  <tr key={item.field_id}>
+                    <Cell>{item.field_id}</Cell>
+                    <Cell>{DOCUMENT_TYPE_LABELS[item.primary_document]}</Cell>
+                    <Cell>
+                      {item.alternative_documents.length > 0
+                        ? item.alternative_documents
+                            .map((type) => DOCUMENT_TYPE_LABELS[type])
+                            .join(", ")
+                        : "—"}
+                    </Cell>
+                    <Cell>
+                      <Badge>
+                        {item.primary_document_present
+                          ? "Document attendu présent mais champ non extrait"
+                          : "Document probablement manquant"}
+                      </Badge>
+                    </Cell>
+                    <Cell>{item.reason}</Cell>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <Cell>Aucun champ missing</Cell>
+                  <Cell>—</Cell>
+                  <Cell>—</Cell>
+                  <Cell>—</Cell>
+                  <Cell>
+                    Tous les champs suivis sont renseignés ou arbitrés.
+                  </Cell>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -193,9 +334,8 @@ export function ProjectDebugView({
                 <th className="px-3 py-2">manuel</th>
                 <th className="px-3 py-2">actions</th>
                 <th className="px-3 py-2">candidate_count</th>
-                <th className="px-3 py-2">selected_candidate</th>
-                <th className="px-3 py-2">rejected_candidates</th>
                 <th className="px-3 py-2">best_candidate_confidence</th>
+                <th className="px-3 py-2">best_candidate_rule</th>
                 <th className="px-3 py-2">failure_stage</th>
                 <th className="px-3 py-2">rejection_reason</th>
               </tr>
@@ -230,30 +370,13 @@ export function ProjectDebugView({
                     />
                   </Cell>
                   <Cell>{field.debug_diagnostic.candidate_count}</Cell>
-                  <Cell>{field.debug_diagnostic.selected_candidate ?? "—"}</Cell>
-                  <Cell>
-                    {field.debug_diagnostic.rejected_candidates.length > 0 ? (
-                      <ul className="space-y-1">
-                        {field.debug_diagnostic.rejected_candidates.map(
-                          (candidate) => (
-                            <li
-                              key={`${candidate.document}-${candidate.page}-${candidate.value}`}
-                              className="text-xs"
-                            >
-                              {candidate.value} — {candidate.reason ?? "rejeté"}{" "}
-                              ({candidate.document}, p.{candidate.page})
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    ) : (
-                      "—"
-                    )}
-                  </Cell>
                   <Cell>
                     {field.debug_diagnostic.best_candidate_confidence ?? "—"}
                   </Cell>
-                  <Cell>{field.debug_diagnostic.failure_stage}</Cell>
+                  <Cell>
+                    {field.debug_diagnostic.best_candidate_rule ?? "—"}
+                  </Cell>
+                  <Cell>{field.debug_diagnostic.failure_stage ?? "—"}</Cell>
                   <Cell>{field.debug_diagnostic.rejection_reason}</Cell>
                 </tr>
               ))}
