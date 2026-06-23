@@ -265,3 +265,22 @@ La fonction pure prend les documents et champs déjà chargés depuis PostgreSQL
 - statut `document_present_rule_missing` si le document prioritaire est déjà présent.
 
 Cette couche ne lit aucun PDF, ne relance aucune extraction et ne modifie aucune donnée.
+
+## Page résultat métier
+
+Le Sprint 6 ajoute la page :
+
+```text
+/analyse/resultat/[projectId]
+```
+
+Elle charge uniquement les données déjà persistées dans PostgreSQL :
+
+- `reports`
+- `documents`
+- `extracted_fields`
+- `extracted_field_sources`
+
+Le loader `src/lib/result/project-result-data.ts` assemble les sections métier, rattache une source courte à chaque champ et réutilise `buildDocumentCoverageReport`.
+
+La page ne lit pas les PDF, ne relance pas classification, extraction ou cohérence au chargement. Les seules écritures possibles viennent des actions explicites `Modifier` et `Valider`, qui réutilisent les routes Sprint 5.3.

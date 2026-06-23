@@ -6,6 +6,32 @@ Toutes les évolutions notables du projet sont documentées ici.
 
 - Documentation projet persistante : statut, architecture, modèle de données, catalogue d’extraction, décisions et workflow développeur.
 
+## Sprint 6
+
+Date : 2026-06-23
+
+Fonctionnalités :
+
+- Page `/analyse/resultat/[projectId]`.
+- Synthèse du score dossier.
+- Sections métier du pré-état daté.
+- Affichage des champs avec valeur, statut, confiance et source.
+- Actions Modifier/Valider via les routes Sprint 5.3.
+- Champs virtuels affichés comme manquants sans action.
+- Section Documents manquants ou recommandés via Sprint 5.6.
+
+Tests :
+
+- Sections métier.
+- Libellés de statuts utilisateur.
+- Présence et protection session de la route résultat.
+- Loader lecture seule sans PDF, classification, extraction ou cohérence.
+- Réutilisation des actions Sprint 5.3.
+
+Migrations :
+
+- Aucune.
+
 ## Sprint 5.6
 
 Date : 2026-06-23

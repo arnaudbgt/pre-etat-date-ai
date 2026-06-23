@@ -142,6 +142,19 @@ Rapport de couverture documentaire.
 - Logique pure dans `src/lib/coverage/document-coverage.ts`.
 - Aucune migration, aucune relecture PDF, aucune relance extraction/classification/cohérence.
 
+### Sprint 6
+
+Page métier de synthèse du pré-état daté.
+
+- Création de `/analyse/resultat/[projectId]`.
+- Affichage du score dossier : complétude, confiance, statut, compteurs de champs.
+- Sections métier : Identification, Situation financière, Charges et budget, Fonds travaux, Travaux, Juridique et diagnostics.
+- Affichage par champ : valeur, statut utilisateur, confiance, source, actions Modifier/Valider.
+- Réutilisation des routes Sprint 5.3 pour les corrections et validations.
+- Champs virtuels absents de la base affichés comme `missing` sans action de modification.
+- Réutilisation du rapport de couverture documentaire Sprint 5.6.
+- Aucune lecture PDF, aucune relance classification/extraction/cohérence au chargement.
+
 ## Fonctionnalités disponibles
 
 - Création de projet anonyme.
@@ -160,6 +173,7 @@ Rapport de couverture documentaire.
 - Diagnostic avancé des champs `missing`, `uncertain` et `inconsistent`.
 - Runner local de tests automatiques sur dossiers PDF réels non commités.
 - Rapport debug de couverture documentaire pour les champs manquants.
+- Page métier de synthèse et vérification des données extraites.
 
 ## Fonctionnalités prévues
 
