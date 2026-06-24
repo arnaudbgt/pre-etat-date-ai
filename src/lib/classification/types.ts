@@ -10,6 +10,7 @@ export const CLASSIFIABLE_DOCUMENT_TYPES = [
   "dtg",
   "ppt",
   "dpe_collectif",
+  "titre_propriete",
 ] as const;
 
 export type ClassifiableDocumentType =

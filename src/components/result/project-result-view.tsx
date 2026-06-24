@@ -1,13 +1,14 @@
 import { DOCUMENT_TYPE_LABELS } from "@/lib/documents/document-types";
 import { fieldStatusLabel, fieldStatusTone } from "@/lib/result/field-status";
 import type {
+  ProjectResultAiSuggestion,
   ProjectResultData,
   ProjectResultField,
 } from "@/lib/result/project-result-data";
 import type { Json } from "@/types/database.types";
 
 import { FieldManualActions } from "@/components/debug/field-manual-actions";
-import { AiSuggestionsSection } from "@/components/result/ai-suggestions-section";
+import { AiSuggestionsGenerateButton } from "@/components/result/ai-suggestions-generate-button";
 import { OwnerContextSection } from "@/components/result/owner-context-section";
 
 function Badge({
@@ -60,9 +61,11 @@ function displayValue(value: Json | null, normalizedValue: string | null) {
 function FieldCard({
   field,
   projectId,
+  suggestions,
 }: {
   field: ProjectResultField;
   projectId: string;
+  suggestions: ProjectResultAiSuggestion[];
 }) {
   const value = displayValue(field.value, field.normalized_value);
 
@@ -118,6 +121,63 @@ function FieldCard({
           </p>
         )}
       </div>
+
+      {suggestions.length > 0 ? (
+        <div className="mt-4 space-y-3 border-t border-neutral-100 pt-4">
+          <p className="text-xs font-semibold tracking-wide text-violet-800 uppercase">
+            Suggestion IA
+          </p>
+          {suggestions.map((suggestion) => {
+            const suggestionValue = displayValue(
+              suggestion.value,
+              suggestion.normalized_value,
+            );
+            const tone =
+              suggestion.status === "proposed_conflict"
+                ? "red"
+                : suggestion.should_apply
+                  ? "green"
+                  : "amber";
+            const label =
+              suggestion.status === "proposed_conflict"
+                ? "Conflit"
+                : suggestion.should_apply
+                  ? "Applicable"
+                  : "À vérifier";
+
+            return (
+              <div
+                className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-xs"
+                key={suggestion.id}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="font-medium text-neutral-900">
+                    {suggestionValue ?? "—"}
+                  </p>
+                  <Badge tone={tone}>{label}</Badge>
+                </div>
+                <div className="mt-2 space-y-1 text-neutral-600">
+                  <p>Confiance : {Math.round(suggestion.confidence)} %</p>
+                  <p>
+                    Source : {suggestion.source_document_filename ?? "—"}
+                    {suggestion.source_page
+                      ? ` — page ${suggestion.source_page}`
+                      : ""}
+                  </p>
+                  {suggestion.source_excerpt ? (
+                    <p className="rounded-md bg-white p-2 text-neutral-700">
+                      {suggestion.source_excerpt}
+                    </p>
+                  ) : null}
+                  {suggestion.reasoning ? (
+                    <p>Raison : {suggestion.reasoning}</p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -160,7 +220,34 @@ export function ProjectResultView({
         projectId={projectId}
       />
 
-      <AiSuggestionsSection suggestions={data.aiSuggestions} />
+      {data.ownerReferenceFromTitle ? (
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <p className="font-medium">
+            Propriétaire identifié à partir du titre de propriété
+          </p>
+          <p className="mt-1">
+            Source prioritaire IA : {data.ownerReferenceFromTitle.filename}
+            {data.ownerReferenceFromTitle.hasSuggestions
+              ? " — suggestions rattachées disponibles."
+              : " — utilisé comme contexte prioritaire lors de la prochaine génération IA."}
+          </p>
+        </section>
+      ) : null}
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold">Suggestions IA</h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            {data.aiSuggestions.length > 0
+              ? `${data.aiSuggestions.length} suggestion(s) enregistrée(s), affichée(s) sous les champs concernés.`
+              : "Aucune suggestion IA enregistrée pour ce dossier."}
+          </p>
+        </div>
+        <AiSuggestionsGenerateButton
+          enabled={data.aiCompletionEnabled}
+          projectId={projectId}
+        />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">
@@ -171,9 +258,11 @@ export function ProjectResultView({
             <thead className="bg-neutral-50 text-left text-xs text-neutral-500 uppercase">
               <tr>
                 <th className="px-3 py-2">Champ</th>
-                <th className="px-3 py-2">Document prioritaire</th>
-                <th className="px-3 py-2">Alternatives</th>
-                <th className="px-3 py-2">Diagnostic</th>
+                 <th className="px-3 py-2">Document prioritaire</th>
+                <th className="px-3 py-2">Impact</th>
+                <th className="px-3 py-2">Peut améliorer</th>
+                 <th className="px-3 py-2">Alternatives</th>
+                 <th className="px-3 py-2">Diagnostic</th>
               </tr>
             </thead>
             <tbody>
@@ -183,8 +272,16 @@ export function ProjectResultView({
                     <td className="border-t border-neutral-200 px-3 py-2 text-sm">
                       {item.field_id}
                     </td>
+                     <td className="border-t border-neutral-200 px-3 py-2 text-sm">
+                       {DOCUMENT_TYPE_LABELS[item.primary_document]}
+                     </td>
                     <td className="border-t border-neutral-200 px-3 py-2 text-sm">
-                      {DOCUMENT_TYPE_LABELS[item.primary_document]}
+                      {item.impact}
+                    </td>
+                    <td className="border-t border-neutral-200 px-3 py-2 text-sm">
+                      {item.potentially_improves.length > 0
+                        ? item.potentially_improves.join(", ")
+                        : "—"}
                     </td>
                     <td className="border-t border-neutral-200 px-3 py-2 text-sm">
                       {item.alternative_documents.length > 0
@@ -203,8 +300,8 @@ export function ProjectResultView({
               ) : (
                 <tr>
                   <td
-                    className="border-t border-neutral-200 px-3 py-3 text-sm text-neutral-500"
-                    colSpan={4}
+                     className="border-t border-neutral-200 px-3 py-3 text-sm text-neutral-500"
+                    colSpan={6}
                   >
                     Aucun champ manquant identifié.
                   </td>
@@ -224,6 +321,9 @@ export function ProjectResultView({
                 field={data.fieldsById[definition.fieldId]}
                 key={definition.fieldId}
                 projectId={projectId}
+                suggestions={data.aiSuggestions.filter(
+                  (suggestion) => suggestion.field_id === definition.fieldId,
+                )}
               />
             ))}
           </div>

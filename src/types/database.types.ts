@@ -24,11 +24,17 @@ export type Database = {
           prompt_version: string;
           reasoning: string | null;
           should_apply: boolean;
+          suggestion_origin: "ai";
           source_document_filename: string | null;
           source_document_id: string | null;
           source_excerpt: string | null;
           source_page: number | null;
-          status: "proposed" | "applied" | "rejected" | "obsolete";
+          status:
+            | "proposed"
+            | "proposed_review"
+            | "proposed_conflict"
+            | "rejected"
+            | "obsolete";
           updated_at: string;
           value: Json | null;
         };
@@ -43,11 +49,17 @@ export type Database = {
           prompt_version: string;
           reasoning?: string | null;
           should_apply?: boolean;
+          suggestion_origin?: "ai";
           source_document_filename?: string | null;
           source_document_id?: string | null;
           source_excerpt?: string | null;
           source_page?: number | null;
-          status?: "proposed" | "applied" | "rejected" | "obsolete";
+          status?:
+            | "proposed"
+            | "proposed_review"
+            | "proposed_conflict"
+            | "rejected"
+            | "obsolete";
           updated_at?: string;
           value?: Json | null;
         };
@@ -62,11 +74,17 @@ export type Database = {
           prompt_version?: string;
           reasoning?: string | null;
           should_apply?: boolean;
+          suggestion_origin?: "ai";
           source_document_filename?: string | null;
           source_document_id?: string | null;
           source_excerpt?: string | null;
           source_page?: number | null;
-          status?: "proposed" | "applied" | "rejected" | "obsolete";
+          status?:
+            | "proposed"
+            | "proposed_review"
+            | "proposed_conflict"
+            | "rejected"
+            | "obsolete";
           updated_at?: string;
           value?: Json | null;
         };
@@ -495,6 +513,7 @@ export type Database = {
         | "dtg"
         | "ppt"
         | "dpe_collectif"
+        | "titre_propriete"
         | "other";
       field_status: "confirmed" | "uncertain" | "missing" | "inconsistent";
       payment_status: "pending" | "paid" | "failed" | "refunded" | "expired";

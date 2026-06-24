@@ -1,6 +1,12 @@
 import type { Json } from "@/types/database.types";
 
-import { isAiSuggestionFieldId } from "./field-allowlist";
+import { AI_SUGGESTION_FIELD_IDS, isAiSuggestionFieldId } from "./field-allowlist";
+
+export type AiSuggestionStatus =
+  | "proposed"
+  | "proposed_review"
+  | "proposed_conflict"
+  | "rejected";
 
 export type AiFieldSuggestion = {
   confidence: number;
@@ -11,16 +17,9 @@ export type AiFieldSuggestion = {
   source_document: string | null;
   source_page: number | null;
   source_excerpt: string | null;
+  status: AiSuggestionStatus;
   value: Json;
 };
-
-const EXPLICIT_VALUE_REQUIRED_FIELDS = new Set([
-  "works_fund_budget_percentage",
-  "annual_budget_amount",
-  "works_fund_annual_amount",
-  "works_fund_quarterly_contribution",
-  "lot_tantiemes",
-]);
 
 const INFERENCE_MARKER_PATTERN =
   /\b(?:implicite|calcule|deduit|estime|extrapole|inferred|calculated|estimated)\b/i;
@@ -41,18 +40,38 @@ function containsInferenceMarker(value: string | null) {
   return value ? INFERENCE_MARKER_PATTERN.test(normalizeComparable(value)) : false;
 }
 
-function applyExplicitValueGuard(suggestion: AiFieldSuggestion) {
+export function applyAiSuggestionSafetyGuards<T extends {
+  confidence: number;
+  field_id: string;
+  reasoning: string | null;
+  should_apply: boolean;
+  source_excerpt: string | null;
+  status?: string | null;
+}>(suggestion: T): T {
+  let guarded = suggestion;
+
+  if (!guarded.source_excerpt) {
+    guarded = {
+      ...guarded,
+      confidence: Math.min(guarded.confidence, 60),
+      should_apply: false,
+    };
+  }
+
+  if (guarded.status && guarded.status !== "proposed") {
+    guarded = { ...guarded, should_apply: false };
+  }
+
   if (
-    !EXPLICIT_VALUE_REQUIRED_FIELDS.has(suggestion.field_id) ||
-    (!containsInferenceMarker(suggestion.reasoning) &&
-      !containsInferenceMarker(suggestion.source_excerpt))
+    !containsInferenceMarker(guarded.reasoning) &&
+    !containsInferenceMarker(guarded.source_excerpt)
   ) {
-    return suggestion;
+    return guarded;
   }
 
   return {
-    ...suggestion,
-    confidence: Math.min(suggestion.confidence, 60),
+    ...guarded,
+    confidence: Math.min(guarded.confidence, 60),
     should_apply: false,
   };
 }
@@ -110,8 +129,14 @@ export function normalizeAiSuggestion(
     record.source_page > 0
       ? record.source_page
       : null;
+  const status: AiSuggestionStatus =
+    record.status === "proposed_review" ||
+    record.status === "proposed_conflict" ||
+    record.status === "rejected"
+      ? record.status
+      : "proposed";
 
-  return applyExplicitValueGuard({
+  return applyAiSuggestionSafetyGuards({
     confidence,
     field_id: record.field_id,
     normalized_value:
@@ -133,6 +158,7 @@ export function normalizeAiSuggestion(
         ? truncate(record.source_excerpt, 200)
         : null,
     source_page: sourcePage,
+    status,
     value: record.value,
   });
 }
@@ -162,20 +188,7 @@ export const AI_SUGGESTIONS_JSON_SCHEMA = {
         properties: {
           confidence: { maximum: 100, minimum: 0, type: "number" },
           field_id: {
-            enum: [
-              "annual_budget_amount",
-              "approval_date",
-              "budget_vote_date",
-              "works_fund_quarterly_contribution",
-              "works_fund_budget_percentage",
-              "lot_number",
-              "lot_tantiemes",
-              "legal_proceedings_description",
-              "collective_loan",
-              "ppt_status",
-              "dtg_status",
-              "collective_dpe_status",
-            ],
+            enum: AI_SUGGESTION_FIELD_IDS,
             type: "string",
           },
           normalized_value: { type: ["string", "null"] },
@@ -184,6 +197,15 @@ export const AI_SUGGESTIONS_JSON_SCHEMA = {
           source_document: { type: ["string", "null"] },
           source_excerpt: { type: ["string", "null"] },
           source_page: { type: ["integer", "null"] },
+          status: {
+            enum: [
+              "proposed",
+              "proposed_review",
+              "proposed_conflict",
+              "rejected",
+            ],
+            type: "string",
+          },
           value: {
             items: {
               type: ["string", "number", "boolean", "null"],
@@ -201,6 +223,7 @@ export const AI_SUGGESTIONS_JSON_SCHEMA = {
           "source_excerpt",
           "reasoning",
           "should_apply",
+          "status",
         ],
         type: "object",
       },

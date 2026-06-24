@@ -2,9 +2,11 @@ import "server-only";
 
 import { buildDocumentCoverageReport } from "@/lib/coverage/document-coverage";
 import type { MissingDocumentRecommendation } from "@/lib/coverage/document-coverage";
+import { getAiSuggestionConfig } from "@/lib/ai/suggestions/config";
 import { listAiFieldSuggestions } from "@/lib/ai/suggestions/persistence";
 import type { ProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
 import { getProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
+import { getEffectiveDocumentType } from "@/lib/documents/document-types";
 import { RESULT_SECTIONS, type ResultSection } from "@/lib/result/sections";
 import type { Database, Json } from "@/types/database.types";
 
@@ -35,9 +37,14 @@ export type ProjectResultAiSuggestion = Awaited<
 >[number];
 
 export type ProjectResultData = {
+  aiCompletionEnabled: boolean;
   aiSuggestions: ProjectResultAiSuggestion[];
   coverage: MissingDocumentRecommendation[];
   fieldsById: Record<string, ProjectResultField>;
+  ownerReferenceFromTitle: {
+    filename: string;
+    hasSuggestions: boolean;
+  } | null;
   ownerContext: ProjectOwnerContext | null;
   report: {
     completion_rate: number;
@@ -137,6 +144,9 @@ export async function getProjectResultData(
   const documentsById = new Map(
     documentsResult.data.map((document) => [document.id, document]),
   );
+  const titleDocument = documentsResult.data.find(
+    (document) => getEffectiveDocumentType(document) === "titre_propriete",
+  );
   const sourcesByFieldId = new Map<string, typeof sourcesResult.data>();
 
   for (const source of sourcesResult.data) {
@@ -196,6 +206,7 @@ export async function getProjectResultData(
   const counts = statusCounts(resultFields);
 
   return {
+    aiCompletionEnabled: getAiSuggestionConfig().enabled,
     aiSuggestions: aiSuggestionsResult,
     coverage: buildDocumentCoverageReport({
       documents: documentsResult.data,
@@ -205,6 +216,15 @@ export async function getProjectResultData(
       })),
     }),
     fieldsById,
+    ownerReferenceFromTitle: titleDocument
+      ? {
+          filename: titleDocument.filename,
+          hasSuggestions: aiSuggestionsResult.some(
+            (suggestion) =>
+              suggestion.source_document_filename === titleDocument.filename,
+          ),
+        }
+      : null,
     ownerContext,
     report: {
       completion_rate: reportResult.data?.completion_rate ?? 0,

@@ -57,6 +57,7 @@ describe("project result page", () => {
     expect(source).toContain("buildDocumentCoverageReport");
     expect(source).toContain("getProjectOwnerContext");
     expect(source).toContain("listAiFieldSuggestions");
+    expect(source).toContain("getAiSuggestionConfig().enabled");
     expect(source).not.toContain("extractTextFromPdf");
     expect(source).not.toContain("classifyDocument");
     expect(source).not.toContain("extractSimpleFields");
@@ -76,8 +77,17 @@ describe("project result page", () => {
     );
 
     expect(source).toContain("Documents manquants ou recommandés");
+    expect(source).toContain("Impact");
+    expect(source).toContain("Peut améliorer");
     expect(source).toContain("OwnerContextSection");
-    expect(source).toContain("AiSuggestionsSection");
+    expect(source).toContain("Propriétaire identifié à partir du titre de propriété");
+    expect(source).toContain("data.ownerReferenceFromTitle");
+    expect(source).toContain("AiSuggestionsGenerateButton");
+    expect(source).toContain("data.aiCompletionEnabled");
+    expect(source).toContain("Suggestion IA");
+    expect(source).toContain("suggestion.should_apply");
+    expect(source).toContain('"À vérifier"');
+    expect(source).toContain("data.aiSuggestions.filter");
     expect(source).toContain("FieldManualActions");
     expect(source).toContain("field.existsInDatabase");
     expect(source).toContain("Champ non initialisé");
@@ -112,5 +122,26 @@ describe("project result page", () => {
     expect(source).toContain("ne remplacent jamais");
     expect(source).not.toContain("/apply");
     expect(source).not.toContain("extracted_fields");
+  });
+
+  it("renders an AI generation button without automatic application", () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/result/ai-suggestions-generate-button.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain("Générer les suggestions IA");
+    expect(source).toContain("Analyse IA en cours...");
+    expect(source).toContain("Suggestions IA générées");
+    expect(source).toContain("Suggestions IA désactivées en environnement local");
+    expect(source).toContain(`/api/projects/$\{projectId\}/ai/suggestions`);
+    expect(source).toContain('method: "POST"');
+    expect(source).toContain("router.refresh()");
+    expect(source).not.toContain("/apply");
+    expect(source).not.toContain("extracted_fields");
+    expect(source).not.toContain("owner_context");
   });
 });

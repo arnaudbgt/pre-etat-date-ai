@@ -53,7 +53,45 @@ describe("document coverage report", () => {
     });
 
     expect(item.primary_document).toBe("releve_coproprietaire");
+    expect(item.impact).toBe("élevé");
     expect(item.alternative_documents).toContain("appel_de_fonds");
+  });
+
+  it("strongly recommends title deed for seller, property and lot attachment", () => {
+    const report = buildDocumentCoverageReport({
+      documents: [],
+      fields: [
+        missing("seller_name"),
+        missing("lot_number"),
+        missing("lot_tantiemes"),
+        missing("property_address"),
+      ],
+    });
+
+    expect(report).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field_id: "seller_name",
+          impact: "élevé",
+          primary_document: "titre_propriete",
+        }),
+        expect.objectContaining({
+          field_id: "lot_number",
+          impact: "élevé",
+          primary_document: "titre_propriete",
+        }),
+        expect.objectContaining({
+          field_id: "lot_tantiemes",
+          impact: "élevé",
+          primary_document: "titre_propriete",
+        }),
+        expect.objectContaining({
+          field_id: "property_address",
+          impact: "élevé",
+          primary_document: "titre_propriete",
+        }),
+      ]),
+    );
   });
 
   it("recommends call for funds for quarterly works fund contribution", () => {

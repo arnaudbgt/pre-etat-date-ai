@@ -3,7 +3,10 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 import { AI_SUGGESTION_PROMPT_VERSION } from "./config";
-import type { AiFieldSuggestion } from "./schema";
+import {
+  applyAiSuggestionSafetyGuards,
+  type AiFieldSuggestion,
+} from "./schema";
 
 function devLog(label: string, payload: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "development") {
@@ -18,10 +21,10 @@ export async function listAiFieldSuggestions(projectId: string) {
   const { data, error } = await supabase
     .from("ai_field_suggestions")
     .select(
-      "id, field_id, value, normalized_value, confidence, should_apply, source_document_filename, source_page, source_excerpt, reasoning, model, prompt_version, status, created_at",
+      "id, field_id, value, normalized_value, confidence, should_apply, source_document_filename, source_page, source_excerpt, reasoning, model, prompt_version, status, suggestion_origin, created_at",
     )
     .eq("project_id", projectId)
-    .eq("status", "proposed")
+    .in("status", ["proposed", "proposed_review", "proposed_conflict", "rejected"])
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -33,7 +36,9 @@ export async function listAiFieldSuggestions(projectId: string) {
     suggestionsCount: data.length,
   });
 
-  return data;
+  return data.map((suggestion) =>
+    applyAiSuggestionSafetyGuards(suggestion),
+  );
 }
 
 export async function persistAiFieldSuggestions(input: {
@@ -48,7 +53,7 @@ export async function persistAiFieldSuggestions(input: {
     .update({ status: "obsolete" })
     .eq("project_id", input.projectId)
     .eq("prompt_version", AI_SUGGESTION_PROMPT_VERSION)
-    .eq("status", "proposed");
+    .in("status", ["proposed", "proposed_review", "proposed_conflict", "rejected"]);
 
   if (obsoleteResult.error) {
     throw new Error(`ai_suggestions_obsolete:${obsoleteResult.error.code}`);
@@ -79,27 +84,32 @@ export async function persistAiFieldSuggestions(input: {
   const { data, error } = await supabase
     .from("ai_field_suggestions")
     .insert(
-      input.suggestions.map((suggestion) => ({
-        confidence: suggestion.confidence,
-        field_id: suggestion.field_id,
+      input.suggestions.map((suggestion) => {
+        const safeSuggestion = applyAiSuggestionSafetyGuards(suggestion);
+
+        return {
+        confidence: safeSuggestion.confidence,
+        field_id: safeSuggestion.field_id,
         model: input.model,
-        normalized_value: suggestion.normalized_value,
+        normalized_value: safeSuggestion.normalized_value,
         project_id: input.projectId,
         prompt_version: AI_SUGGESTION_PROMPT_VERSION,
-        reasoning: suggestion.reasoning,
-        should_apply: suggestion.should_apply,
-        source_document_filename: suggestion.source_document,
-        source_document_id: suggestion.source_document
-          ? (documentIdByFilename.get(suggestion.source_document) ?? null)
+        reasoning: safeSuggestion.reasoning,
+        should_apply: safeSuggestion.should_apply,
+        suggestion_origin: "ai",
+        source_document_filename: safeSuggestion.source_document,
+        source_document_id: safeSuggestion.source_document
+          ? (documentIdByFilename.get(safeSuggestion.source_document) ?? null)
           : null,
-        source_excerpt: suggestion.source_excerpt,
-        source_page: suggestion.source_page,
-        status: "proposed",
-        value: suggestion.value,
-      })),
+        source_excerpt: safeSuggestion.source_excerpt,
+        source_page: safeSuggestion.source_page,
+        status: safeSuggestion.status,
+        value: safeSuggestion.value,
+        };
+      }),
     )
     .select(
-      "id, field_id, value, normalized_value, confidence, should_apply, source_document_filename, source_page, source_excerpt, reasoning, model, prompt_version, status, created_at",
+      "id, field_id, value, normalized_value, confidence, should_apply, source_document_filename, source_page, source_excerpt, reasoning, model, prompt_version, status, suggestion_origin, created_at",
     );
 
   if (error) {
@@ -118,5 +128,7 @@ export async function persistAiFieldSuggestions(input: {
     projectId: input.projectId,
   });
 
-  return data;
+  return data.map((suggestion) =>
+    applyAiSuggestionSafetyGuards(suggestion),
+  );
 }

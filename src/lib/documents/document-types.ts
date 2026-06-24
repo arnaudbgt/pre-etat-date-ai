@@ -11,6 +11,7 @@ export const DOCUMENT_TYPE_OPTIONS = [
   "dtg",
   "ppt",
   "dpe_collectif",
+  "titre_propriete",
   "other",
 ] as const satisfies readonly ClassifiedDocumentType[];
 
@@ -29,6 +30,7 @@ export const DOCUMENT_TYPE_LABELS: Record<ManualDocumentType, string> = {
   pv_ag: "PV d’AG",
   reglement_copropriete: "Règlement de copropriété",
   releve_coproprietaire: "Relevé copropriétaire",
+  titre_propriete: "Titre de propriété",
 };
 
 export function isManualDocumentType(

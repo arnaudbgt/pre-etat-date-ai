@@ -1,6 +1,8 @@
 import "server-only";
 
-export const AI_SUGGESTION_PROMPT_VERSION = "ai-suggestions-v1";
+export const AI_SUGGESTION_PROMPT_VERSION = "ai-suggestions-v2";
+
+export type AiCompletionMode = "targeted" | "broad";
 
 function numberFromEnv(name: string, fallback: number) {
   const value = Number(process.env[name]);
@@ -8,7 +10,11 @@ function numberFromEnv(name: string, fallback: number) {
 }
 
 export function getAiSuggestionConfig() {
+  const completionMode: AiCompletionMode =
+    process.env.AI_COMPLETION_MODE === "broad" ? "broad" : "targeted";
+
   return {
+    completionMode,
     enabled: process.env.AI_COMPLETION_ENABLED === "true",
     maxCharsPerDocument: numberFromEnv(
       "AI_COMPLETION_MAX_CHARS_PER_DOCUMENT",

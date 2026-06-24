@@ -569,6 +569,55 @@ export const CLASSIFICATION_RULES: ClassificationRule[] = [
       all("incompatible_house", ["maison", "surface habitable du logement"]),
     ],
   },
+  {
+    type: "titre_propriete",
+    titleSignals: [
+      signal("title_property_deed", [
+        "titre de propriete",
+        "attestation de propriete",
+        "acte de vente",
+        "vente immobiliere",
+        "acte authentique",
+      ]),
+    ],
+    strongExpressions: [
+      signal("notary_act", [
+        "office notarial",
+        "notaire",
+        "la vente est consentie",
+        "acquereur",
+        "vendeur",
+      ]),
+      signal("property_designation", [
+        "designation du bien",
+        "designation des biens",
+        "etat descriptif de division",
+      ]),
+    ],
+    positiveKeywords: [
+      signal("lots", ["lot", "lots", "numero de lot"]),
+      signal("tantiemes", ["tantiemes", "milliemes"]),
+      signal("cadastre", ["cadastre", "section cadastrale"]),
+      signal("copropriete", ["copropriete", "reglement de copropriete"]),
+    ],
+    majorStructures: [
+      all("owner_lot_structure", ["acquereur", "lot", "tantiemes"]),
+      all("deed_property_structure", ["notaire", "designation", "bien"]),
+    ],
+    secondaryStructures: [
+      all("division_structure", ["etat descriptif", "division", "lot"]),
+      all("sale_structure", ["vendeur", "acquereur", "prix"]),
+    ],
+    negativeStrong: [
+      signal("negative_minutes", ["proces verbal", "proces-verbal"]),
+      signal("negative_due_call", ["appel de fonds", "appel de charges"]),
+      signal("negative_account", ["releve de compte coproprietaire"]),
+    ],
+    negativeWeak: [signal("negative_diagnostic", ["diagnostic technique"])],
+    incompatible: [
+      all("incompatible_ag_vote", ["resolution", "assemblee generale"]),
+    ],
+  },
 ];
 
 export const OTHER_TITLE_SIGNALS: Signal[] = [

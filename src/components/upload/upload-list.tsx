@@ -46,6 +46,7 @@ const documentTypeLabels: Record<ClassifiedDocumentType, string> = {
   pv_ag: "Procès-verbal d’AG",
   reglement_copropriete: "Règlement de copropriété",
   releve_coproprietaire: "Relevé copropriétaire",
+  titre_propriete: "Titre de propriété",
 };
 
 function StatusIcon({ status }: { status: UploadEntry["status"] }) {

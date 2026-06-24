@@ -66,6 +66,13 @@ describe("document rule classifier", () => {
        effet de serre en kg CO2/m2/an. Étiquette énergie, étiquette climat, numéro
        d'enregistrement ADEME, diagnostiqueur certifié, chauffage collectif de la copropriété.`,
     ],
+    [
+      "titre_propriete",
+      `TITRE DE PROPRIÉTÉ. Acte authentique reçu par Maître Dupont, notaire.
+       La vente est consentie à la SCI LES MIMOSAS. Désignation du bien : immeuble sis
+       10 rue des Lilas. État descriptif de division, lot n°417 appartement et lot n°17 garage.
+       Tantièmes de copropriété 42100/10250000 et 4900/10250000.`,
+    ],
   ])("classifies %s", (expectedType, text) => {
     const result = classify(text);
 

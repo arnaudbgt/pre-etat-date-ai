@@ -12,6 +12,7 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local --schema public > src/types/database.types.ts",
     "test": "vitest run",
+    "test:ai-benchmark": "tsx --conditions react-server scripts/run-ai-benchmark.ts",
     "test:real-world": "tsx --conditions react-server scripts/run-real-world-tests.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
