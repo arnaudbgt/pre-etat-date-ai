@@ -56,6 +56,7 @@ describe("project result page", () => {
 
     expect(source).toContain("buildDocumentCoverageReport");
     expect(source).toContain("getProjectOwnerContext");
+    expect(source).toContain("listAiFieldSuggestions");
     expect(source).not.toContain("extractTextFromPdf");
     expect(source).not.toContain("classifyDocument");
     expect(source).not.toContain("extractSimpleFields");
@@ -76,6 +77,7 @@ describe("project result page", () => {
 
     expect(source).toContain("Documents manquants ou recommandés");
     expect(source).toContain("OwnerContextSection");
+    expect(source).toContain("AiSuggestionsSection");
     expect(source).toContain("FieldManualActions");
     expect(source).toContain("field.existsInDatabase");
     expect(source).toContain("Champ non initialisé");
@@ -97,5 +99,18 @@ describe("project result page", () => {
     expect(source).not.toContain("seller_email");
     expect(source).not.toContain("seller_first_name");
     expect(source).not.toContain("tantiemes");
+  });
+
+  it("renders AI suggestions as read-only proposals", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/result/ai-suggestions-section.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("Suggestions IA");
+    expect(source).toContain("Suggestion uniquement");
+    expect(source).toContain("ne remplacent jamais");
+    expect(source).not.toContain("/apply");
+    expect(source).not.toContain("extracted_fields");
   });
 });

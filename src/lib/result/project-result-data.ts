@@ -2,6 +2,7 @@ import "server-only";
 
 import { buildDocumentCoverageReport } from "@/lib/coverage/document-coverage";
 import type { MissingDocumentRecommendation } from "@/lib/coverage/document-coverage";
+import { listAiFieldSuggestions } from "@/lib/ai/suggestions/persistence";
 import type { ProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
 import { getProjectOwnerContext } from "@/lib/owner-context/project-owner-context";
 import { RESULT_SECTIONS, type ResultSection } from "@/lib/result/sections";
@@ -29,7 +30,12 @@ export type ProjectResultField = {
   value: Json | null;
 };
 
+export type ProjectResultAiSuggestion = Awaited<
+  ReturnType<typeof listAiFieldSuggestions>
+>[number];
+
 export type ProjectResultData = {
+  aiSuggestions: ProjectResultAiSuggestion[];
   coverage: MissingDocumentRecommendation[];
   fieldsById: Record<string, ProjectResultField>;
   ownerContext: ProjectOwnerContext | null;
@@ -82,6 +88,7 @@ export async function getProjectResultData(
     sourcesResult,
     reportResult,
     ownerContext,
+    aiSuggestionsResult,
   ] =
     await Promise.all([
       supabase
@@ -108,6 +115,7 @@ export async function getProjectResultData(
         .eq("project_id", projectId)
         .maybeSingle(),
       getProjectOwnerContext(projectId),
+      listAiFieldSuggestions(projectId),
     ]);
 
   if (documentsResult.error) {
@@ -188,6 +196,7 @@ export async function getProjectResultData(
   const counts = statusCounts(resultFields);
 
   return {
+    aiSuggestions: aiSuggestionsResult,
     coverage: buildDocumentCoverageReport({
       documents: documentsResult.data,
       fields: resultFields.map((field) => ({

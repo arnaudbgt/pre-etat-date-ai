@@ -12,6 +12,81 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_field_suggestions: {
+        Row: {
+          confidence: number;
+          created_at: string;
+          field_id: string;
+          id: string;
+          model: string;
+          normalized_value: string | null;
+          project_id: string;
+          prompt_version: string;
+          reasoning: string | null;
+          should_apply: boolean;
+          source_document_filename: string | null;
+          source_document_id: string | null;
+          source_excerpt: string | null;
+          source_page: number | null;
+          status: "proposed" | "applied" | "rejected" | "obsolete";
+          updated_at: string;
+          value: Json | null;
+        };
+        Insert: {
+          confidence: number;
+          created_at?: string;
+          field_id: string;
+          id?: string;
+          model: string;
+          normalized_value?: string | null;
+          project_id: string;
+          prompt_version: string;
+          reasoning?: string | null;
+          should_apply?: boolean;
+          source_document_filename?: string | null;
+          source_document_id?: string | null;
+          source_excerpt?: string | null;
+          source_page?: number | null;
+          status?: "proposed" | "applied" | "rejected" | "obsolete";
+          updated_at?: string;
+          value?: Json | null;
+        };
+        Update: {
+          confidence?: number;
+          created_at?: string;
+          field_id?: string;
+          id?: string;
+          model?: string;
+          normalized_value?: string | null;
+          project_id?: string;
+          prompt_version?: string;
+          reasoning?: string | null;
+          should_apply?: boolean;
+          source_document_filename?: string | null;
+          source_document_id?: string | null;
+          source_excerpt?: string | null;
+          source_page?: number | null;
+          status?: "proposed" | "applied" | "rejected" | "obsolete";
+          updated_at?: string;
+          value?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_field_suggestions_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_field_suggestions_source_document_id_fkey";
+            columns: ["source_document_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       documents: {
         Row: {
           auto_delete_after: string | null;

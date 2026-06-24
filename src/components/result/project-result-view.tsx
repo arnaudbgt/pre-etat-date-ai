@@ -7,6 +7,7 @@ import type {
 import type { Json } from "@/types/database.types";
 
 import { FieldManualActions } from "@/components/debug/field-manual-actions";
+import { AiSuggestionsSection } from "@/components/result/ai-suggestions-section";
 import { OwnerContextSection } from "@/components/result/owner-context-section";
 
 function Badge({
@@ -158,6 +159,8 @@ export function ProjectResultView({
         ownerContext={data.ownerContext}
         projectId={projectId}
       />
+
+      <AiSuggestionsSection suggestions={data.aiSuggestions} />
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">
